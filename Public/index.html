@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>NBA Handicapper</title>
+<style>
+:root{--bg:#f6f7f9;--card:#fff;--tx:#14181f;--mu:#5c6573;--bd:#dfe3e8;--ac:#0b5fff;--gd:#12805c;--wr:#b26a00;--bad:#b42318;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media (prefers-color-scheme:dark){:root{--bg:#0f1318;--card:#181e26;--tx:#eef1f5;--mu:#98a2b3;--bd:#2a323d;--ac:#6ea0ff;--gd:#4ccf9f;--wr:#f0b04a;--bad:#ff7b72}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--tx);font:15px/1.45 -apple-system,system-ui,"Segoe UI",Roboto,sans-serif}
+main{max-width:760px;margin:0 auto;padding:16px}
+h1{font-size:20px;margin:0}h2{font-size:15px;margin:18px 0 8px}
+.mu,.note{color:var(--mu);font-size:13px}.note{margin:6px 0 0}
+.card{background:var(--card);border:1px solid var(--bd);border-radius:12px;padding:12px;margin-bottom:10px}
+button.game{display:block;width:100%;text-align:left;color:inherit;font:inherit;cursor:pointer}
+button.back,input{font:inherit}button.back{background:none;border:0;color:var(--ac);padding:0 0 10px;cursor:pointer}
+input{padding:4px 8px;border:1px solid var(--bd);border-radius:8px;background:var(--card);color:var(--tx)}
+.wrap{overflow-x:auto}table{width:100%;border-collapse:collapse;font-size:13px;white-space:nowrap}
+th,td{padding:6px 5px;border-bottom:1px solid var(--bd);text-align:left}th{color:var(--mu);font-weight:500;font-size:12px}
+.t{font-weight:600}.ok{color:var(--gd)}.wr{color:var(--wr)}.bad{color:var(--bad)}
+.g{font-weight:700}.tag{font-size:12px;padding:1px 8px;border:1px solid var(--bd);border-radius:99px;color:var(--mu)}
+.hero{background:linear-gradient(135deg,#0b5fff,#7a2cf0);color:#fff;border-radius:16px;padding:16px;margin-bottom:14px}
+.hero h1{font-size:22px}.hero p{margin:4px 0 10px;opacity:.9;font-size:13px}
+.hero input{background:rgba(255,255,255,.15);border-color:rgba(255,255,255,.35);color:#fff}
+.hero input::-webkit-calendar-picker-indicator{filter:invert(1)}
+.gc{border-left:4px solid var(--ac);box-shadow:0 2px 8px rgba(0,0,0,.1)}
+.top{display:flex;justify-content:space-between;align-items:center;margin-bottom:6px}
+.badge{background:var(--ac);color:#fff;font-size:12px;font-weight:600;padding:2px 10px;border-radius:99px}
+.tr{display:flex;align-items:center;gap:10px;padding:6px 0}
+.lg{width:36px;height:36px;object-fit:contain;background:#fff;border-radius:50%;padding:3px}
+.nm{flex:1;min-width:0}.nm b{display:block}.rec{font-size:12px;color:var(--mu)}
+.od{display:flex;gap:6px}
+.pill{background:var(--bg);border:1px solid var(--bd);border-radius:8px;padding:3px 8px;font-size:13px;font-weight:600;min-width:52px;text-align:center}
+.pill.fav{background:var(--ac);border-color:var(--ac);color:#fff}
+.tot{margin-top:6px;padding-top:8px;border-top:1px dashed var(--bd);font-size:13px;color:var(--mu);display:flex;justify-content:space-between}
+.mh{display:flex;align-items:center;justify-content:space-between;background:var(--card);border:1px solid var(--bd);border-radius:14px;padding:12px;margin-bottom:10px}
+.sd{display:flex;align-items:center;gap:8px}.sd.r{text-align:right}.sd b,.md b{display:block}.sd .lg{width:44px;height:44px}
+.md{text-align:center}.md span{display:block;font-size:12px}
+.tabs{display:flex;gap:6px;overflow-x:auto;margin-bottom:10px;padding-bottom:2px}
+.tab{flex:none;padding:6px 12px;border-radius:99px;border:1px solid var(--bd);background:var(--card);color:var(--tx);font:inherit;cursor:pointer}
+.tab.on{background:var(--ac);border-color:var(--ac);color:#fff}
+.cols{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:2px}
+.ch{display:flex;align-items:center;gap:6px;font-weight:600}.ch .lg{width:26px;height:26px}
+.pos{text-align:center;margin:8px 0 4px}.pos span{display:inline-block;background:var(--bg);border:1px solid var(--bd);border-radius:99px;padding:0 12px;font-size:12px;font-weight:700}
+.pr{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.pcd{background:var(--bg);border:1px solid var(--bd);border-radius:12px;padding:8px;min-width:0}
+.ph{display:flex;align-items:center;gap:6px}.hs{width:36px;height:36px;border-radius:50%;object-fit:cover;background:var(--bd);flex:none}
+.pn{min-width:0}.pn b{display:block;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.pn span{font-size:12px}.pn i{font-style:normal}
+.st{display:flex;gap:8px;margin-top:6px;font-size:12px;color:var(--mu);flex-wrap:wrap}.st b{color:var(--tx)}
+.pb{margin-top:4px;font-size:11px;color:var(--mu)}
+.pcd{cursor:pointer}.why{display:none;margin-top:6px;padding-top:6px;border-top:1px dashed var(--bd);font-size:11px;color:var(--mu)}.pcd.open .why{display:block}
+.chips{display:flex;gap:6px;overflow-x:auto;margin-bottom:8px}
+.tab{text-align:center;line-height:1.25}.tab b{font-size:13px}
+.ctl{display:flex;align-items:center;gap:10px;margin-bottom:10px}
+.ctl select{font:inherit;padding:6px 8px;border:1px solid var(--bd);border-radius:8px;background:var(--card);color:var(--tx)}
+.stp{width:36px;height:36px;border-radius:50%;border:1px solid var(--bd);background:var(--card);color:var(--tx);font-size:18px;cursor:pointer}
+.ctl b{min-width:36px;text-align:center;font-size:18px}
+.cw{overflow-x:auto}.cin{position:relative}
+.bars{display:flex;height:150px;align-items:flex-end;position:relative}
+.bc{width:38px;flex:none;display:flex;flex-direction:column;align-items:center;justify-content:flex-end}
+.bar{width:22px;border-radius:4px 4px 0 0}.bar.gr{background:#1a9a52}.bar.rd{background:#d64545}
+.bv{font-size:12px;margin-bottom:2px}
+.thr{position:absolute;left:0;right:0;border-top:2px dashed var(--mu);pointer-events:none}
+.lrow{display:flex}.bl{width:38px;flex:none;text-align:center;font-size:11px;color:var(--mu)}.bl img{width:22px;height:22px;display:block;margin:4px auto 0}
+.sum{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px}.sum span{background:var(--bg);border:1px solid var(--bd);border-radius:99px;padding:2px 10px;font-size:13px}
+.tiles{display:flex;gap:10px;margin-bottom:8px}.tiles div{flex:1;background:var(--bg);border:1px solid var(--bd);border-radius:10px;padding:8px;text-align:center}.tiles b{display:block;font-size:24px}.tiles span{font-size:12px;color:var(--mu)}
+.pcd.inj{border:2px solid #e5484d;box-shadow:0 0 0 2px rgba(229,72,77,.25)}.ib{display:inline-block;background:#e5484d;color:#fff;border-radius:4px;padding:0 5px;font-size:10px;font-weight:700;margin-left:4px}
+.ln{font-weight:700;font-size:13px;margin:14px 0 0;padding-top:8px;border-top:1px solid var(--bd)}.ln:first-of-type{border-top:0}
+.gn{font-size:11px;color:var(--mu);margin-top:4px}
+.ov{position:fixed;inset:0;background:rgba(0,0,0,.5);display:flex;align-items:flex-end;justify-content:center;z-index:9}.sheet{background:var(--card);color:var(--tx);width:100%;max-width:520px;border-radius:16px 16px 0 0;padding:16px 16px calc(16px + env(safe-area-inset-bottom,0px))}
+.gopt{display:flex;align-items:center;gap:6px;padding:8px 0;border-bottom:1px solid var(--bd)}.gopt span{flex:1;font-weight:600}
+main{padding-bottom:calc(84px + env(safe-area-inset-bottom,0px))}
+.nav{position:fixed;left:0;right:0;bottom:0;display:flex;background:var(--card);border-top:1px solid var(--bd);padding-bottom:env(safe-area-inset-bottom,0px);z-index:8}
+.nav button{flex:1;min-width:0;background:none;border:0;color:var(--mu);font:inherit;font-size:11px;letter-spacing:-.01em;white-space:nowrap;padding:8px 0 10px;cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:3px}
+.nav button svg{width:22px;height:22px;stroke:currentColor;fill:none;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+.nav button.on{color:var(--ac);font-weight:600}
+/* sport ribbon (replaces the Home banner): stays at the top of every page */
+.sport{position:sticky;top:0;z-index:7;max-width:760px;margin:0 auto;padding:10px 16px 8px;background:var(--bg);display:flex;gap:8px}
+.sport button{flex:1;display:flex;align-items:center;justify-content:center;gap:8px;border:1px solid var(--bd);background:var(--card);color:var(--mu);border-radius:12px;padding:9px 10px;font:inherit;font-size:16px;font-weight:800;letter-spacing:.02em;cursor:pointer}
+.sport button svg{width:26px;height:26px;flex:none}
+.sport button.on{background:linear-gradient(135deg,#0b5fff,#7a2cf0);border-color:transparent;color:#fff;box-shadow:0 2px 8px rgba(11,95,255,.3)}
+.sport+main{padding-top:6px}
+.lr{display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid var(--bd)}.lr:last-child{border-bottom:0}
+.lr .rk{width:20px;color:var(--mu);font-size:13px;text-align:right}.lr .nm{flex:1;min-width:0}.lr .nm b{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.lr .v{font-weight:700;font-size:17px}.hs2{width:40px;height:40px;border-radius:50%;object-fit:cover;background:var(--bd);flex:none}
+.hr{display:flex;gap:4px;margin-top:4px;flex-wrap:wrap}.hr span{font-size:11px;border-radius:6px;padding:1px 6px;background:var(--bg);border:1px solid var(--bd)}
+.hr span.hi{border-color:var(--gd);color:var(--gd)}.hr span.lo{border-color:var(--bad);color:var(--bad)}
+.today{font-size:10px;font-weight:700;color:#fff;background:var(--ac);border-radius:4px;padding:0 5px;margin-left:4px}
+.row2{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:10px}
+.flt{padding:10px 12px;margin-bottom:10px}.fl{display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;font-size:12px}.fl b{font-size:13px}.flt .chips .tab{padding:5px 11px}.flt .chips .tab small{display:block;font-size:10px;opacity:.8}.fg{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:2px 0 6px}.fg label{display:flex;flex-direction:column;gap:3px;font-size:12px;min-width:0}.fg select{font:inherit;font-size:14px;padding:7px 8px;border:1px solid var(--bd);border-radius:8px;background:var(--card);color:var(--tx);width:100%}.trh{cursor:pointer;display:flex;align-items:center;gap:6px;user-select:none}.trh .tw{display:inline-block;width:12px;color:var(--ac);font-size:12px;transition:transform .15s}.trh.open .tw{transform:rotate(90deg)}.trx .lr.ex{display:none}.trx.open .lr.ex{display:flex}.trmore{display:block;width:100%;text-align:center;padding:9px 0 3px}
+.lnk{border:0;background:none;color:var(--ac);font:inherit;font-size:12px;font-weight:600;cursor:pointer;padding:0}
+.badge.live{background:#e5484d;animation:pulse 1.6s ease-in-out infinite}@keyframes pulse{50%{opacity:.55}}
+.gc.lv{border-left-color:#e5484d}.sc{font-size:22px;font-weight:800;min-width:28px;text-align:right;margin-left:8px}
+.seg{display:flex;background:var(--card);border:1px solid var(--bd);border-radius:12px;padding:3px;margin-bottom:10px}.seg button{flex:1;border:0;background:none;color:var(--mu);font:inherit;font-size:13px;font-weight:600;padding:8px 4px;border-radius:9px;cursor:pointer}.seg button.on{background:var(--ac);color:#fff}
+.addp{display:block;margin-top:4px;margin-left:auto;font:inherit;font-size:11px;font-weight:700;padding:3px 8px;border-radius:99px;border:1px solid var(--ac);background:none;color:var(--ac);cursor:pointer;white-space:nowrap}.addp.on{background:var(--ac);color:#fff}
+.plc{position:absolute;top:4px;left:calc(50% + 6px);background:#e5484d;color:#fff;font-size:10px;font-weight:700;border-radius:99px;padding:0 5px;line-height:16px}
+.msh{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:8px}.mst{display:flex;align-items:center;gap:6px;flex:1}.mst.r{justify-content:flex-end;text-align:right}.mst .lg{width:28px;height:28px}
+.msr{display:flex;align-items:center;font-size:14px;margin-top:10px}.msl{flex:1}.msv{flex:1;text-align:right}.msc{flex:1.3;text-align:center;font-weight:600}
+.msb{display:flex;gap:4px;margin-top:4px}.msbo,.msbd{flex:1;height:5px;background:var(--bd);border-radius:3px;overflow:hidden;display:flex}.msbo{justify-content:flex-end}
+.msbo i{display:block;height:100%;background:#1a9a52;opacity:.45}.msbd i{display:block;height:100%;background:#d64545;opacity:.45}.msb i.w{opacity:1}
+.whl{position:relative;width:min(340px,88vw);margin:6px auto 12px}.whl svg{width:100%;display:block}.wptr{position:absolute;top:-8px;left:50%;transform:translateX(-50%);width:0;height:0;border-left:14px solid transparent;border-right:14px solid transparent;border-top:26px solid #ff7a00;z-index:2;filter:drop-shadow(0 2px 2px rgba(0,0,0,.35))}
+.spinb{display:block;width:100%;max-width:340px;margin:0 auto;padding:14px;border:0;border-radius:14px;background:linear-gradient(135deg,#0a1f44,#1e6bff);color:#fff;font:inherit;font-size:18px;font-weight:800;letter-spacing:.06em;cursor:pointer}.spinb:disabled{opacity:.55;cursor:default}
+.lr.wl{align-items:flex-start}.lr.wl .nm b{white-space:normal;overflow:visible;font-size:13px;line-height:1.3}.lr.wl .nm .mu{font-size:12px}
+.val{margin-top:6px;font-size:12px;font-weight:600;color:var(--gd)}.val span{font-weight:400;color:var(--mu)}
+.fl{list-style:none;padding:0;margin:8px 0 0}.fl li{font-size:13px;padding:5px 0;border-top:1px dashed var(--bd)}.fl b{margin-right:4px}
+.hot{color:var(--wr)}.cold{color:var(--ac)}
+.nwg{display:flex;align-items:center;gap:8px;margin:0 0 4px;cursor:pointer}.nwg img{width:26px;height:26px}.nwg b{flex:1}.nwg .mu{font-size:12px}
+.nwi{display:flex;gap:10px;padding:10px 0;border-top:1px solid var(--bd)}.nwi .hs2{width:38px;height:38px}.nwi .nm{flex:1;min-width:0}
+.nwi .t1{display:flex;align-items:center;gap:6px;flex-wrap:wrap}.nwi .t1 b{font-size:14px}.nwi p{margin:3px 0 0;font-size:13px}.nwi .mu{font-size:12px}
+.kd{font-size:11px;font-weight:700;border-radius:6px;padding:1px 6px;color:#fff;white-space:nowrap}.kd.new{background:#e5484d}.kd.return{background:#1a9a52}.kd.status{background:#b26a00}.kd.goalie{background:#7a2cf0}.kd.suspension{background:#5c6573}
+.imp{font-size:11px;font-weight:700;border:1px solid var(--bd);border-radius:99px;padding:0 7px;white-space:nowrap}.imp.high{border-color:var(--bad);color:var(--bad)}.imp.med{border-color:var(--wr);color:var(--wr)}.imp.low{color:var(--mu)}
+.nwh{display:block;padding:8px 0;border-top:1px solid var(--bd);font-size:13px;color:inherit;text-decoration:none}.nwh b{display:block}
+.nwx{display:flex;justify-content:space-between;gap:8px;font-size:13px;padding:6px 0;border-top:1px dashed var(--bd)}.nwx span{color:var(--mu);text-align:right}
+</style>
+</head>
+<body>
+<header class="sport"><button class="on" style="cursor:default"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="10" fill="#f28c28"/><g fill="none" stroke="#5c2a00" stroke-width="1.2"><circle cx="12" cy="12" r="10"/><path d="M2 12h20M12 2v20M5.2 4.7c2.9 3.4 2.9 11.2 0 14.6M18.8 4.7c-2.9 3.4-2.9 11.2 0 14.6"/></g></svg>NBA Handicapper</button></header>
+<main id="app"></main>
+<nav class="nav" id="nav">
+<button data-t="home" onclick="go('home')"><svg viewBox="0 0 24 24"><path d="M3 11l9-8 9 8"/><path d="M5 10v10h14V10"/></svg>Home</button>
+<button data-t="stats" onclick="go('stats')"><svg viewBox="0 0 24 24"><path d="M3 18h18"/><path d="M3 18l2-11 5 5 2-7 2 7 5-5 2 11"/></svg>Leaders</button>
+<button data-t="leaders" onclick="go('leaders')"><svg viewBox="0 0 24 24"><rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 8h8M8 12h8M8 16h5"/></svg>Props</button>
+<button data-t="trends" onclick="go('trends')"><svg viewBox="0 0 24 24"><path d="M3 12h4l3-7 4 14 3-7h4"/></svg>Trends</button>
+<button data-t="news" onclick="go('news')"><svg viewBox="0 0 24 24"><path d="M4 5h13v14H6a2 2 0 0 1-2-2z"/><path d="M17 9h3v8a2 2 0 0 1-2 2"/><path d="M7 9h7M7 13h7M7 16h4"/></svg>News</button>
+</nav>
+<script>
+var app=document.getElementById("app"),TODAY=new Date().toLocaleDateString("en-CA",{timeZone:"America/Toronto"});
+function addDays(d,n){var x=new Date(d+"T12:00:00Z");x.setUTCDate(x.getUTCDate()+n);return x.toISOString().slice(0,10)}
+function dayLabel(d){return d===TODAY?"Today":new Date(d+"T12:00:00Z").toLocaleDateString("en-US",{weekday:"short",month:"short",day:"numeric",timeZone:"UTC"})}
+function dayChips(cur,fn){var h='<div class="chips">';for(var i=0;i<5;i++){var d=addDays(TODAY,i);h+='<button class="tab'+(d===cur?" on":"")+'" onclick="'+fn+'(\''+d+'\')">'+dayLabel(d)+'</button>'}return h+'</div>'}
+function esc(s){return String(s==null?"":s).replace(/[&<>"]/g,function(c){return{"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]})}
+function pr(p){return p==null?"–":(p>0?"+"+p:p)}
+function gc(g){return !g||g==="–"?"":g[0]==="A"?"ok":g[0]==="B"||g[0]==="C"?"wr":"bad"}
+function tm(iso){return new Date(iso).toLocaleTimeString("en-US",{hour:"numeric",minute:"2-digit",timeZone:"America/Toronto"})+" ET"}
+function img(u,c){return u?'<img class="'+c+'" src="'+esc(u)+'" alt="" onerror="this.style.visibility=\'hidden\'">':""}
+async function api(u){var r=await fetch(u),j=await r.json();if(!r.ok)throw new Error(j.error||r.status);return j}
+var LIVE_T=null,TAB="home";
+function navOn(t){TAB=t;document.querySelectorAll("#nav button").forEach(function(b){b.classList.toggle("on",b.dataset.t===t)})}
+function go(t){window.scrollTo(0,0);clearTimeout(LIVE_T);if(t==="home"){NDATE=TODAY;nbaList()}else nbaSoon(t)}
+// ---------- NBA ----------
+var NDATE=TODAY,NM=null;
+var NB_SOON={stats:["NBA Leaders","Scoring, rebounding, assists and more"],leaders:["NBA Props","Points, rebounds, assists, threes and combos"],trends:["NBA Trends","Hot players and teams against the spread"],news:["NBA News","Injuries and lineup changes"],parlay:["Parlay Checker",""],wheel:["The Flippin’ Wheel",""],admin:["Admin",""]};
+function nbaSoon(t){navOn(t);var x=NB_SOON[t]||["",""],nhlOnly=false;
+  app.innerHTML='<div class="card"><b>'+esc(x[0])+'</b><p class="note" style="margin-top:6px">'+(nhlOnly?'This tab is NHL only for now. Tap NHL at the top to use it.':esc(x[1])+' are coming in the next stage of the NBA build.')+'</p></div>'}
+function nbDay(d){NDATE=d;nbaList()}
+function nbSp(s){return s&&s.spread?(s.spread.point>0?"+":"")+s.spread.point+(s.spread.price!=null?" ("+pr(s.spread.price)+")":""):"–"}
+function nbRow(t,s,sc){var ml=s&&s.ml!=null?s.ml:null;
+  return'<div class="tr">'+img(t.logo,"lg")+'<div class="nm"><b>'+esc(t.name)+'</b><span class="rec">'+(t.record?esc(t.record)+' (W-L)':'')+'</span></div>'+
+  (s?'<div class="od"><span class="pill'+(ml!=null&&ml<0?' fav':'')+'">'+pr(ml)+'</span><span class="pill">'+nbSp(s)+'</span></div>':'')+(sc!=null?'<span class="sc">'+sc+'</span>':'')+'</div>'}
+function nbLive(L){return L.half?"Halftime":esc(L.detail||("Q"+L.period+" · "+L.clock))}
+async function nbaList(){
+  navOn('home');app.innerHTML=dayChips(NDATE,"nbDay")+'<div id="nl">Loading…</div>';
+  try{
+    var gs=await api("/api/nba/games?date="+NDATE),h="",el=document.getElementById("nl");if(!el)return;
+    var fin=gs.filter(function(g){return g.state==="FINAL"}).length;
+    gs=gs.filter(function(g){return g.state!=="FINAL"});
+    if(!gs.length)h='<p class="mu">'+(fin?'All of this date’s games are final.':'No NBA games on this date.')+'</p>';
+    gs.forEach(function(g){var o=g.odds,t=o&&o.total,L=g.live;
+      h+='<button class="card game gc'+(L?' lv':'')+'" onclick="nbShow(\''+g.home.abbr+"','"+g.away.abbr+'\')"><div class="top">'+
+      (L?'<span class="badge live">● LIVE</span><span class="mu"><b>'+nbLive(L)+'</b></span>':g.state==="PPD"?'<span class="badge">Postponed</span><span></span>':'<span class="badge">'+tm(g.start)+'</span><span class="mu">'+(o?esc(o.book):"Odds unavailable")+'</span>')+'</div>'+
+      (g.note?'<div class="mu" style="font-size:12px;margin:-2px 0 2px">'+esc(g.note)+'</div>':'')+
+      nbRow(g.away,o&&o.away,L?L.away:null)+nbRow(g.home,o&&o.home,L?L.home:null)+
+      (t?'<div class="tot"><span>Total '+t.point+'</span><span>O '+pr(t.over)+' · U '+pr(t.under)+'</span></div>':'')+'</button>'});
+    if(fin&&gs.length)h+='<p class="note">'+fin+' final game'+(fin>1?'s':'')+' hidden.</p>';
+    h+='<p class="note">Lines from DraftKings via ESPN. Tap a game for team form, rest and the 2-year head-to-head.</p>';
+    el.innerHTML=h;
+    clearTimeout(LIVE_T);if(gs.some(function(g){return g.live}))LIVE_T=setTimeout(function(){if(TAB==="home"&&document.getElementById("nl"))nbaList()},60000);
+  }catch(e){var el2=document.getElementById("nl");if(el2)el2.innerHTML='<p class="bad">'+esc(e.message)+'</p>'}
+}
+async function nbShow(home,away){
+  clearTimeout(LIVE_T);navOn('home');window.scrollTo(0,0);
+  app.innerHTML='<button class="back" onclick="nbaList()">‹ All games</button><div id="nm">Loading matchup…</div>';
+  try{NM=await api("/api/nba/matchup?home="+home+"&away="+away+"&date="+NDATE);if(document.getElementById("nm"))nbDraw()}
+  catch(e){var el=document.getElementById("nm");if(el)el.innerHTML='<p class="bad">'+esc(e.message)+'</p>'}
+}
+function nbRk(x){return x&&x.rank?'<span class="mu"> ('+x.rank+(x.rank===1?'st':x.rank===2?'nd':x.rank===3?'rd':'th')+')</span>':''}
+function nbG(g){return'<i class="g '+gc(g)+'">'+esc(g)+'</i>'}
+function nbDraw(){
+  var m=NM,g=m.game,o=g.odds,T=m.teams,A=T.away,H=T.home,dt=new Date(g.start).toLocaleDateString("en-US",{weekday:"short",month:"short",day:"numeric",timeZone:"America/Toronto"});
+  var fav=o&&o.home.spread&&o.home.spread.point!=null?(o.home.spread.point<0?[g.home.abbr,o.home.spread.point]:o.home.spread.point>0?[g.away.abbr,-o.home.spread.point]:["Pick’em",""]):null;
+  var h='<button class="back" onclick="nbaList()">‹ All games</button><div class="mh"><div class="sd">'+img(g.away.logo,"lg")+'<div><b>'+esc(g.away.abbr)+'</b><span class="mu">'+esc(g.away.record||"")+'</span></div></div>'+
+    '<div class="md"><b>'+(g.live?'<span class="bad">● '+g.live.away+'–'+g.live.home+'</span>':dt)+'</b><span class="mu">'+(g.live?nbLive(g.live):tm(g.start))+'</span><span class="mu">'+(fav?esc(fav[0])+" "+fav[1]:"")+(m.marketTotal!=null?" · O/U "+m.marketTotal:"")+'</span></div>'+
+    '<div class="sd r"><div><b>'+esc(g.home.abbr)+'</b><span class="mu">'+esc(g.home.record||"")+'</span></div>'+img(g.home.logo,"lg")+'</div></div>';
+  // odds
+  h+='<h2>Odds</h2><div class="card">'+(o?'<div class="wrap"><table><tr><th>Team</th><th>Moneyline</th><th>Spread</th></tr>'+
+    [["away",g.away],["home",g.home]].map(function(x){var s=o[x[0]];return'<tr><td class="t">'+esc(x[1].abbr)+'</td><td>'+pr(s.ml)+'</td><td>'+nbSp(s)+'</td></tr>'}).join("")+
+    (o.total?'<tr><td class="t">Total</td><td colspan="2">'+o.total.point+' · O '+pr(o.total.over)+' / U '+pr(o.total.under)+'</td></tr>':'')+'</table></div><p class="note">'+esc(o.book)+' lines via ESPN.</p>':'<p class="mu" style="margin:0">No lines posted yet.</p>')+'</div>';
+  // team comparison
+  var row=function(l,a,b){return'<tr><td class="mu">'+l+'</td><td>'+a+'</td><td>'+b+'</td></tr>'};
+  var rs=function(t){var r=t.rest||{};return r.b2b||r.threeInFour?'<span class="bad">'+esc(r.note)+'</span>':esc(r.note||"–")};
+  h+='<h2>Team matchup</h2><div class="card"><div class="wrap"><table style="white-space:normal;table-layout:fixed"><tr><th style="width:30%"></th><th>'+esc(g.away.abbr)+' (away)</th><th>'+esc(g.home.abbr)+' (home)</th></tr>'+
+    row("Overall grade",nbG(A.overallGrade),nbG(H.overallGrade))+row("Offense grade",nbG(A.offenseGrade),nbG(H.offenseGrade))+row("Defense grade",nbG(A.defenseGrade),nbG(H.defenseGrade))+
+    row("Points / game",(A.pf.perGame!=null?A.pf.perGame:"–")+nbRk(A.pf),(H.pf.perGame!=null?H.pf.perGame:"–")+nbRk(H.pf))+
+    row("Allowed / game",(A.pa.perGame!=null?A.pa.perGame:"–")+nbRk(A.pa),(H.pa.perGame!=null?H.pa.perGame:"–")+nbRk(H.pa))+
+    row("Point diff",(A.net.perGame!=null?(A.net.perGame>0?"+":"")+A.net.perGame:"–")+nbRk(A.net),(H.net.perGame!=null?(H.net.perGame>0?"+":"")+H.net.perGame:"–")+nbRk(H.net))+
+    row("Road / home",esc(A.road||"–")+' <span class="mu">road</span>',esc(H.home||"–")+' <span class="mu">home</span>')+
+    row("Last 10",esc(A.l10)+(A.l10pf!=null?' <span class="mu">'+A.l10pf+'–'+A.l10pa+'</span>':''),esc(H.l10)+(H.l10pf!=null?' <span class="mu">'+H.l10pf+'–'+H.l10pa+'</span>':''))+
+    row("Last 5",esc(A.last5),esc(H.last5))+row("Streak",esc(A.streak),esc(H.streak))+row("Rest",rs(A),rs(H))+'</table></div>';
+  var pw=Math.max(A.prevW||0,H.prevW||0);
+  h+='<p class="note">Grades rank each team’s scoring and defence against the league and against tonight’s opponent (A = top 4, F = bottom 4).'+
+    (pw>0?' Early season: last season still counts up to '+Math.round(pw*100)+'% of the per-game numbers and fades out by game 20.':'')+
+    (A.formFromLast||H.formFromLast?' Form includes the end of last season until a team has played 5 games.':'')+'</p></div>';
+  // head-to-head
+  var S=m.h2hSum,hd=m.h2h;
+  h+='<h2>Head-to-head · last 2 years</h2><div class="card">';
+  if(!hd.length)h+='<p class="mu" style="margin:0">No meetings in the last 2 years.</p>';
+  else{
+    h+='<div class="sum"><span>'+esc(g.home.abbr)+' '+S.homeWins+'–'+S.awayWins+'</span><span>'+esc(g.home.abbr)+' ATS '+S.ats[0]+'–'+S.ats[1]+(S.ats[2]?'–'+S.ats[2]:'')+'</span><span>Over '+S.overs+' · Under '+S.unders+'</span>'+(S.avgTotal!=null?'<span>Avg total '+S.avgTotal+'</span>':'')+'</div>';
+    h+='<div class="wrap"><table><tr><th>Date</th><th>Score</th><th>'+esc(g.home.abbr)+' ATS</th><th>Total</th>'+(m.marketTotal!=null?'<th>vs '+m.marketTotal+'</th>':'')+'</tr>'+
+    hd.map(function(r){var aw=r.as>r.hs;
+      return'<tr><td>'+new Date(r.date+"T12:00:00Z").toLocaleDateString("en-US",{month:"short",day:"numeric",timeZone:"UTC"})+" ’"+r.date.slice(2,4)+(r.playoff?' <span class="tag">PO</span>':'')+'</td><td>'+(aw?'<b>':'')+esc(r.away)+' '+r.as+(aw?'</b>':'')+' @ '+(!aw?'<b>':'')+esc(r.home)+' '+r.hs+(!aw?'</b>':'')+'</td>'+
+      '<td class="'+(r.ats==="W"?"ok":r.ats==="L"?"bad":"")+'">'+(r.ats?r.ats+' <span class="mu">('+(r.spread>0?"+":"")+r.spread+')</span>':'–')+'</td>'+
+      '<td>'+r.total+(r.ou?' <span class="'+(r.ou==="Over"?"ok":r.ou==="Under"?"bad":"mu")+'">'+r.ou[0]+'</span> <span class="mu">'+r.close+'</span>':'')+'</td>'+
+      (m.marketTotal!=null?'<td class="'+(r.vsToday==="Over"?"ok":r.vsToday==="Under"?"bad":"")+'">'+(r.vsToday||"–")+'</td>':'')+'</tr>'}).join("")+'</table></div>';
+    h+='<p class="note">ATS is '+esc(g.home.abbr)+'’s result against that game’s closing spread (shown in brackets). Total shows O/U against that game’s closing total'+(m.marketTotal!=null?', and the last column against tonight’s line':'')+'. Bold = winner.</p>';
+  }
+  h+='</div><p class="note">Player props, injuries, lineups, rest and travel edges are coming in the next stages.</p>';
+  app.innerHTML=h;
+}
+
+go('home');
+</script>
+</body>
+</html>
