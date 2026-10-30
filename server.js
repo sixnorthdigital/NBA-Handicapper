@@ -19,7 +19,7 @@ const r2 = x => Math.round(x * 100) / 100;
 const nba = require("./nba")({ getJSON, r2 });
 const record = require("./record");   // Record tab (results saved by track.js on GitHub Actions)
 
-const MIME = { ".html": "text/html", ".js": "text/javascript", ".css": "text/css" };
+const MIME = { ".html": "text/html", ".js": "text/javascript", ".css": "text/css", ".svg": "image/svg+xml", ".png": "image/png", ".ico": "image/x-icon", ".json": "application/json" };
 const PUB = path.join(__dirname, "Public");
 const send = (res, code, body, type = "application/json") => { res.writeHead(code, { "Content-Type": type }); res.end(typeof body === "string" || Buffer.isBuffer(body) ? body : JSON.stringify(body)); };
 
