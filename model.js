@@ -101,10 +101,18 @@ module.exports = ({ getJSON, r2, teamGames, pool, seasonYr, etDate }) => {
     });
     return by;
   }
+  // start from the tracker's saved box scores (nba-data branch), so a fresh server only fetches the newest games
+  let seeded = false;
+  async function seed() {
+    if (seeded) return; seeded = true;
+    try { const n = loadBoxes(await fetchRaw(process.env.NBA_BOXES_URL || "https://raw.githubusercontent.com/sixnorthdigital/NBA-Handicapper/nba-data/boxes.json")); console.log("nba: seeded", n, "box scores"); }
+    catch (e) { console.log("nba: no saved box scores yet"); }
+  }
   async function buildLeague(yr) {
     if (LG.busy) return LG.busy;
     LG.busy = (async () => {
       try {
+        if (!BOX.size) await seed();
         const by = await seasonIds(yr), ids = [...new Set(Object.values(by).flat())];
         await pool(ids, 4, id => box(id));
         const teams = {};
@@ -365,6 +373,7 @@ module.exports = ({ getJSON, r2, teamGames, pool, seasonYr, etDate }) => {
   }
 
   // box-score cache in/out, so the tracker can keep it between runs
-  const dumpBoxes = () => Object.fromEntries(BOX), loadBoxes = o => { for (const [k, v] of Object.entries(o || {})) if (v && v.t) BOX.set(k, v); return BOX.size; };
+  function dumpBoxes() { return Object.fromEntries(BOX); }
+  function loadBoxes(o) { for (const [k, v] of Object.entries(o || {})) if (v && v.t) BOX.set(k, v); return BOX.size; }
   return { analyse, league, box, dumpBoxes, loadBoxes, IDS, GEO };
 };

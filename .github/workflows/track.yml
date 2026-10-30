@@ -43,6 +43,7 @@ jobs:
           git checkout -q -b nba-data
           git config user.name "nba-tracker"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add records.json
+          cp ../.cache/boxes.json boxes.json   # box scores, so the apps start without re-downloading the season
+          git add records.json boxes.json
           git commit -q -m "Records $(date -u +%Y-%m-%dT%H:%MZ)"
           git push -q -f "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git" nba-data
