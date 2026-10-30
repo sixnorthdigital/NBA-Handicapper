@@ -1,0 +1,48 @@
+# NBA results tracker: every 30 minutes from noon to midnight Eastern, save each game's picks before tip-off
+# and grade finished games. Records go to records.json on the "nba-data" branch (Render only deploys main,
+# so this never triggers a deploy). Runs on GitHub's computers, so the Render app can stay asleep.
+name: NBA tracker
+on:
+  schedule:
+    - cron: "*/30 15-23,0-4 * * *"   # UTC
+  workflow_dispatch: {}
+permissions:
+  contents: write
+concurrency:
+  group: nba-tracker
+  cancel-in-progress: false
+jobs:
+  track:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Restore box scores
+        uses: actions/cache@v4
+        with:
+          path: .cache
+          key: nba-boxes-${{ github.run_id }}
+          restore-keys: nba-boxes-
+      - name: Get saved records
+        run: |
+          mkdir -p data
+          if git ls-remote --exit-code --heads origin nba-data >/dev/null 2>&1; then
+            git fetch --depth 1 origin nba-data
+            git --work-tree=data checkout FETCH_HEAD -- records.json || true
+            git reset -q
+          fi
+      - name: Save picks and grade results
+        run: node track.js data .cache
+      - name: Push records
+        working-directory: data
+        run: |
+          git init -q
+          git checkout -q -b nba-data
+          git config user.name "nba-tracker"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add records.json
+          git commit -q -m "Records $(date -u +%Y-%m-%dT%H:%MZ)"
+          git push -q -f "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git" nba-data

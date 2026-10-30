@@ -17,6 +17,7 @@ async function getJSON(url, ttl = 600) {
 const today = () => new Date().toLocaleDateString("en-CA", { timeZone: "America/Toronto" });
 const r2 = x => Math.round(x * 100) / 100;
 const nba = require("./nba")({ getJSON, r2 });
+const record = require("./record");   // Record tab (results saved by track.js on GitHub Actions)
 
 const MIME = { ".html": "text/html", ".js": "text/javascript", ".css": "text/css" };
 const PUB = path.join(__dirname, "Public");
@@ -25,6 +26,7 @@ const send = (res, code, body, type = "application/json") => { res.writeHead(cod
 http.createServer(async (req, res) => {
   const u = new URL(req.url, "http://x"), q = u.searchParams;
   try {
+    if (u.pathname === "/api/nba/record") return send(res, 200, await record.summary());
     if (u.pathname.startsWith("/api/nba/")) {
       const d = q.get("date") || today(); if (!/^\d{4}-\d\d-\d\d$/.test(d)) return send(res, 400, { error: "Bad date" });
       if (u.pathname === "/api/nba/games") return send(res, 200, await nba.games(d));

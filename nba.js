@@ -190,5 +190,5 @@ module.exports = ({ getJSON, r2 }) => {
   const model = require("./model")({ getJSON, r2, teamGames, pool, seasonYr, etDate });
   const warm = () => model.league(seasonYr(new Date()), 0).catch(() => {});   // build the league table in the background
 
-  return { games, matchup, warm };
+  return { games, matchup, warm, dumpBoxes: model.dumpBoxes, loadBoxes: model.loadBoxes };
 };

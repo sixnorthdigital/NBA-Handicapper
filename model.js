@@ -364,5 +364,7 @@ module.exports = ({ getJSON, r2, teamGames, pool, seasonYr, etDate }) => {
     };
   }
 
-  return { analyse, league, box, IDS, GEO };
+  // box-score cache in/out, so the tracker can keep it between runs
+  const dumpBoxes = () => Object.fromEntries(BOX), loadBoxes = o => { for (const [k, v] of Object.entries(o || {})) if (v && v.t) BOX.set(k, v); return BOX.size; };
+  return { analyse, league, box, dumpBoxes, loadBoxes, IDS, GEO };
 };

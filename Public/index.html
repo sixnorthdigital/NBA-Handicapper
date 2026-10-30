@@ -123,6 +123,7 @@ main{padding-bottom:calc(84px + env(safe-area-inset-bottom,0px))}
 <button data-t="stats" onclick="go('stats')"><svg viewBox="0 0 24 24"><path d="M3 18h18"/><path d="M3 18l2-11 5 5 2-7 2 7 5-5 2 11"/></svg>Leaders</button>
 <button data-t="leaders" onclick="go('leaders')"><svg viewBox="0 0 24 24"><rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 8h8M8 12h8M8 16h5"/></svg>Props</button>
 <button data-t="trends" onclick="go('trends')"><svg viewBox="0 0 24 24"><path d="M3 12h4l3-7 4 14 3-7h4"/></svg>Trends</button>
+<button data-t="record" onclick="go('record')"><svg viewBox="0 0 24 24"><path d="M9 11l3 3 8-8"/><path d="M20 12v7a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h9"/></svg>Record</button>
 <button data-t="news" onclick="go('news')"><svg viewBox="0 0 24 24"><path d="M4 5h13v14H6a2 2 0 0 1-2-2z"/><path d="M17 9h3v8a2 2 0 0 1-2 2"/><path d="M7 9h7M7 13h7M7 16h4"/></svg>News</button>
 </nav>
 <script>
@@ -139,7 +140,7 @@ function img(u,c){return u?'<img class="'+c+'" src="'+esc(u)+'" alt="" onerror="
 async function api(u){var r=await fetch(u),j=await r.json();if(!r.ok)throw new Error(j.error||r.status);return j}
 var LIVE_T=null,TAB="home";
 function navOn(t){TAB=t;document.querySelectorAll("#nav button").forEach(function(b){b.classList.toggle("on",b.dataset.t===t)})}
-function go(t){window.scrollTo(0,0);clearTimeout(LIVE_T);if(t==="home"){NDATE=TODAY;nbaList()}else nbaSoon(t)}
+function go(t){window.scrollTo(0,0);clearTimeout(LIVE_T);if(t==="home"){NDATE=TODAY;nbaList()}else if(t==="record")recordPage();else nbaSoon(t)}
 // ---------- NBA ----------
 var NDATE=TODAY,NM=null;
 var NB_SOON={stats:["NBA Leaders","Scoring, rebounding, assists and more"],leaders:["NBA Props","Points, rebounds, assists, threes and combos"],trends:["NBA Trends","Hot players and teams against the spread"],news:["NBA News","Injuries and lineup changes"],parlay:["Parlay Checker",""],wheel:["The Flippin’ Wheel",""],admin:["Admin",""]};
@@ -287,6 +288,37 @@ function nbDraw(){
   app.innerHTML=h;
 }
 
+// ---------- Record: how the picks have done (saved before tip-off by the tracker, graded from final scores) ----------
+function rcU(u){return'<strong class="'+(u>0?'ok':u<0?'bad':'')+'">'+(u>0?'+':'')+u.toFixed(2)+'u</strong>'}
+function rcWL(t){return t.w+'–'+t.l+(t.p?'–'+t.p:'')}
+function rcTile(lbl,t){return'<div><b>'+(t.n?rcWL(t):'–')+'</b><span>'+lbl+'</span><span style="display:block;margin-top:2px">'+(t.n?rcU(t.units)+' · '+(t.roi>0?'+':'')+t.roi+'% ROI':'no results yet')+'</span></div>'}
+var RC_R={win:['✓','ok'],loss:['✗','bad'],push:['P','mu']};
+function rcPick(lbl,x,g){if(!x)return'';var r=g&&RC_R[g.r];
+  return'<div class="nwx"><div><span class="mu" style="font-size:12px">'+lbl+(x.strength?' · '+esc(x.strength):'')+'</span><br><b>'+esc(x.label||(x.kind==="ml"?x.abbr+' ML':x.kind==="spread"?x.abbr+' '+(x.point>0?'+':'')+x.point:(x.pick==="over"?'Over ':'Under ')+x.line))+'</b> '+pr(x.price)+'</div><span>'+pct(x.p)+(r?'<br><b class="'+r[1]+'">'+r[0]+' '+(g.u>0?'+':'')+g.u.toFixed(2)+'u</b>':'<br><span class="mu">pending</span>')+'</span></div>'}
+async function recordPage(){
+  navOn('record');app.innerHTML='<div id="rc">Loading the record…</div>';
+  try{var R=await api("/api/nba/record"),T=R.totals,h="",el=document.getElementById("rc");if(!el)return;
+    h+='<div class="card"><b>NBA model record</b><p class="note" style="margin-top:4px">Every game’s picks are saved automatically before tip-off (latest lines), then graded from the final score. 1 unit flat on every pick. '+(R.updated?'Updated '+new Date(R.updated).toLocaleString("en-US",{weekday:"short",hour:"numeric",minute:"2-digit",timeZone:"America/Toronto"})+' ET.':'The tracker hasn’t run yet.')+(R.pending?' '+R.pending+' game'+(R.pending>1?'s':'')+' pending.':'')+'</p></div>';
+    h+='<h2>Best bets</h2><div class="tiles">'+rcTile("Best bets",T.best)+'</div><div class="tiles">'+rcTile("Moneyline",R.bestByType.ml)+rcTile("Spread",R.bestByType.spread)+rcTile("Total",R.bestByType.total)+'</div>';
+    h+='<h2>Leans (every game)</h2><div class="tiles">'+rcTile("Winner",T.winner)+rcTile("Spread",T.spread)+rcTile("Total",T.total)+'</div>';
+    if(R.underdogs.n)h+='<p class="note" style="margin-top:-2px">Underdog winner leans: '+rcWL(R.underdogs)+', '+rcU(R.underdogs.units)+'.</p>';
+    var S=R.strength,rows="";["winner","spread","total"].forEach(function(k){["Strong","Moderate","Slight","Toss-up"].forEach(function(s){var t=S[k]&&S[k][s];if(t&&t.n)rows+='<tr><td>'+k[0].toUpperCase()+k.slice(1)+'</td><td>'+s+'</td><td>'+rcWL(t)+'</td><td>'+(t.hit!=null?t.hit+'%':'–')+'</td><td>'+rcU(t.units)+'</td></tr>'})});
+    h+='<h2>By strength</h2><div class="card">'+(rows?'<div class="wrap"><table><tr><th>Lean</th><th>Strength</th><th>W–L</th><th>Hit</th><th>Units</th></tr>'+rows+'</table></div><p class="note">If the model works, Strong should beat Moderate, which should beat Slight.</p>':'<p class="mu" style="margin:0">No graded games yet.</p>')+'</div>';
+    var A=R.accuracy;
+    h+='<h2>Model vs market</h2><div class="card">'+(A.margin||A.total?'<div class="wrap"><table><tr><th>Average miss</th><th>Model</th><th>Market</th><th>Games</th></tr>'+
+      (A.margin?'<tr><td>Final margin</td><td class="'+(A.margin.model<A.margin.market?'ok':'bad')+'">'+A.margin.model+' pts</td><td>'+A.margin.market+' pts</td><td>'+A.margin.n+'</td></tr>':'')+
+      (A.total?'<tr><td>Final total</td><td class="'+(A.total.model<A.total.market?'ok':'bad')+'">'+A.total.model+' pts</td><td>'+A.total.market+' pts</td><td>'+A.total.n+'</td></tr>':'')+'</table></div><p class="note">How far the model’s projected margin and total were from the final score, next to the betting line. Getting close to the market is good; beating it over a few hundred games is the real test.</p>':'<p class="mu" style="margin:0">No graded games yet.</p>')+'</div>';
+    h+='<h2>By day</h2>';
+    if(!R.days.length)h+='<p class="mu">Nothing saved yet. The tracker saves picks from noon ET on game days.</p>';
+    R.days.forEach(function(d,i){var u=0,w=0,l=0;d.games.forEach(function(g){var b=g.grades&&g.grades.best;if(b){u+=b.u;if(b.r==="win")w++;else if(b.r==="loss")l++}});
+      h+='<details class="card"'+(i===0?' open':'')+'><summary style="cursor:pointer;display:flex;justify-content:space-between;gap:8px"><b>'+dayLabel(d.date)+'</b><span class="mu">'+d.games.length+' game'+(d.games.length>1?'s':'')+(w+l?' · best bets '+w+'–'+l+' '+(u>0?'+':'')+u.toFixed(2)+'u':'')+'</span></summary>'+
+      d.games.map(function(g){var s=g.snap,G=g.grades||{},R2=g.result;
+        return'<div style="padding:8px 0;border-top:1px solid var(--bd);margin-top:8px"><div style="display:flex;justify-content:space-between"><b>'+esc(g.away)+' @ '+esc(g.home)+'</b><span class="mu">'+(R2&&!R2.void?esc(g.away)+' '+R2.as+' – '+R2.hs+' '+esc(g.home):R2&&R2.void?'Postponed':tm(g.start))+'</span></div>'+
+        '<div class="mu" style="font-size:12px">Model '+esc(g.away)+' '+Math.round(s.model.away)+' – '+Math.round(s.model.home)+' '+esc(g.home)+' · total '+s.model.total+(s.odds.total!=null?' (line '+s.odds.total+')':'')+'</div>'+
+        rcPick("Best bet",s.best,G.best)+rcPick("Winner",s.winner,G.winner)+rcPick("Spread",s.spread,G.spread)+rcPick("Total",s.total,G.total)+'</div>'}).join("")+'</details>'});
+    el.innerHTML=h;
+  }catch(e){var e2=document.getElementById("rc");if(e2)e2.innerHTML='<p class="bad">'+esc(e.message)+'</p>'}
+}
 go('home');
 </script>
 </body>

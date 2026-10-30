@@ -12,6 +12,11 @@ Model (`model.js`): offense vs defense at the expected pace, + home court (2.4),
 (60% off the team's own score, 40% to the opponent). Early season, team rates are pulled toward last season (10 games of weight).
 Chances use ±12.5 on the margin and ±18 on the total, blended 50/50 with the market's no-vig price. All of these are starting guesses to check against results.
 
+**Record tab / tracker:** `track.js` runs on GitHub Actions every 30 minutes from noon to midnight ET (`.github/workflows/track.yml`).
+Before tip-off it saves each game's best bet and winner/spread/total leans with the latest lines; once the game is final it grades them
+(1 unit flat). Results go to `records.json` on the `nba-data` branch, so the Render app can sleep and no Render hours are used.
+The Record tab shows best bets and leans (W–L, units, ROI), results by strength, and how close the model's margin and total were vs the betting line.
+
 The league table (every team's box scores) builds in the background at start-up and refreshes every 30 minutes.
 
 Run locally: `npm start`, then open http://localhost:3000. Deploy on Render as a Node web service with start command `npm start`.
