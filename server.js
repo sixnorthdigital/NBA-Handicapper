@@ -35,4 +35,7 @@ http.createServer(async (req, res) => {
     if (!f.startsWith(PUB) || !fs.existsSync(f)) return send(res, 404, "Not found", "text/plain");
     send(res, 200, fs.readFileSync(f), MIME[path.extname(f)] || "text/plain");
   } catch (e) { send(res, e.code || 500, { error: e.message }); }
-}).listen(PORT, () => console.log(`NBA Handicapper on http://localhost:${PORT}`));
+}).listen(PORT, () => {
+  console.log(`NBA Handicapper on http://localhost:${PORT}`);
+  setTimeout(nba.warm, 3000); setInterval(nba.warm, 30 * 60000);   // league box scores: offense, defense and pace for every team
+});

@@ -108,12 +108,14 @@ module.exports = ({ getJSON, r2 }) => {
     for (const ab of new Set([...Object.keys(cur), ...Object.keys(prev)])) {
       const x = cur[ab] || { w: 0, l: 0 }, q = prev[ab], gp = x.w + x.l, w = q ? Math.max(0, 1 - gp / PREV_GP) : 0;
       const mix = k => gp && x[k] != null ? (q && q[k] != null ? (1 - w) * x[k] + w * q[k] : x[k]) : q ? q[k] : null;
-      T[ab] = { ...x, gp, prevW: r2(gp ? w : q ? 1 : 0), pf: mix("pf"), pa: mix("pa"), pfNow: gp ? x.pf : null, paNow: gp ? x.pa : null };
+      T[ab] = { ...x, gp, prevW: r2(gp ? w : q ? 1 : 0), pf: mix("pf"), pa: mix("pa"), pfNow: gp ? x.pf : null, paNow: gp ? x.pa : null,
+        pfPrev: q ? q.pf : null, paPrev: q ? q.pa : null };
     }
+    const pv = Object.values(prev).filter(x => x.pf != null), lgPrev = pv.length ? pv.reduce((t, x) => t + x.pf, 0) / pv.length : null;
     const rank = (k, low) => { const ks = Object.keys(T).filter(a => T[a][k] != null).sort((a, b) => low ? T[a][k] - T[b][k] : T[b][k] - T[a][k]); ks.forEach((a, i) => T[a]["r" + k] = i + 1); };
     Object.values(T).forEach(t => t.net = t.pf != null && t.pa != null ? t.pf - t.pa : null);
     rank("pf"); rank("pa", true); rank("net");
-    return { T, n: Object.keys(T).length };
+    return { T, n: Object.keys(T).length, lgPrev };
   }
   const grade = (r, n) => { const x = r / (n || 30); return x <= .134 ? "A" : x <= .334 ? "B" : x <= .667 ? "C" : x <= .867 ? "D" : "F"; };
   function teamCard(tb, me, opp) {   // rank 1 = best; facing a weak defence / offence pushes the grade up
@@ -132,7 +134,8 @@ module.exports = ({ getJSON, r2 }) => {
     const l10 = res.slice(0, 10);
     return { streak: res.length ? (res[0].w ? "W" : "L") + n : "-", last5: res.slice(0, 5).map(r => r.w ? "W" : "L").join(" ") || "-",
       l10: l10.length ? `${l10.filter(r => r.w).length}-${l10.filter(r => !r.w).length}` : "-",
-      l10pf: l10.length ? r2(l10.reduce((t, r) => t + r.me, 0) / l10.length) : null, l10pa: l10.length ? r2(l10.reduce((t, r) => t + r.op, 0) / l10.length) : null };
+      l10pf: l10.length ? r2(l10.reduce((t, r) => t + r.me, 0) / l10.length) : null, l10pa: l10.length ? r2(l10.reduce((t, r) => t + r.op, 0) / l10.length) : null,
+      l10net: l10.length ? r2(l10.reduce((t, r) => t + r.me - r.op, 0) / l10.length) : null };
   }
   function rest(all, date) {   // days since the last game, back-to-back, 3 games in 4 nights
     const before = all.filter(g => etDate(g.date) < date).sort((a, b) => b.date.localeCompare(a.date));
@@ -177,8 +180,15 @@ module.exports = ({ getJSON, r2 }) => {
     const sum = { games: hist.length, homeWins: hist.filter(r => r.winner === home).length, awayWins: hist.filter(r => r.winner === away).length,
       ats: ["W", "L", "P"].map(k => hist.filter(r => r.ats === k).length), overs: hist.filter(r => r.ou === "Over").length, unders: hist.filter(r => r.ou === "Under").length,
       avgTotal: hist.length ? r2(hist.reduce((t, r) => t + r.total, 0) / hist.length) : null };
-    return { game, marketTotal: line, season: yr, teams: { home: side(home, away, hg, hp), away: side(away, home, ag, ap) }, h2h: hist, h2hSum: sum };
+    const teams = { home: side(home, away, hg, hp), away: side(away, home, ag, ap) };
+    let an = null, modelErr = null;
+    try { an = await model.analyse(game, date, tb, hist, teams); } catch (e) { modelErr = e.message; console.error("model:", e.message); }
+    return { game, marketTotal: line, season: yr, teams, h2h: hist, h2hSum: sum, ...(an || {}), modelErr };
   }
 
-  return { games, matchup };
+  // the game model (model.js): offense vs defense, pace, rest/travel, injuries, lineups
+  const model = require("./model")({ getJSON, r2, teamGames, pool, seasonYr, etDate });
+  const warm = () => model.league(seasonYr(new Date()), 0).catch(() => {});   // build the league table in the background
+
+  return { games, matchup, warm };
 };

@@ -111,6 +111,7 @@ main{padding-bottom:calc(84px + env(safe-area-inset-bottom,0px))}
 .kd{font-size:11px;font-weight:700;border-radius:6px;padding:1px 6px;color:#fff;white-space:nowrap}.kd.new{background:#e5484d}.kd.return{background:#1a9a52}.kd.status{background:#b26a00}.kd.goalie{background:#7a2cf0}.kd.suspension{background:#5c6573}
 .imp{font-size:11px;font-weight:700;border:1px solid var(--bd);border-radius:99px;padding:0 7px;white-space:nowrap}.imp.high{border-color:var(--bad);color:var(--bad)}.imp.med{border-color:var(--wr);color:var(--wr)}.imp.low{color:var(--mu)}
 .nwh{display:block;padding:8px 0;border-top:1px solid var(--bd);font-size:13px;color:inherit;text-decoration:none}.nwh b{display:block}
+.sgl{list-style:none;padding:0;margin:8px 0 0}.sgl li{font-size:13px;padding:5px 0;border-top:1px dashed var(--bd)}.sgl b{margin-right:4px}
 .nwx{display:flex;justify-content:space-between;gap:8px;font-size:13px;padding:6px 0;border-top:1px dashed var(--bd)}.nwx span{color:var(--mu);text-align:right}
 </style>
 </head>
@@ -131,6 +132,7 @@ function dayLabel(d){return d===TODAY?"Today":new Date(d+"T12:00:00Z").toLocaleD
 function dayChips(cur,fn){var h='<div class="chips">';for(var i=0;i<5;i++){var d=addDays(TODAY,i);h+='<button class="tab'+(d===cur?" on":"")+'" onclick="'+fn+'(\''+d+'\')">'+dayLabel(d)+'</button>'}return h+'</div>'}
 function esc(s){return String(s==null?"":s).replace(/[&<>"]/g,function(c){return{"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]})}
 function pr(p){return p==null?"–":(p>0?"+"+p:p)}
+function pct(x){return Math.round(x*100)+"%"}
 function gc(g){return !g||g==="–"?"":g[0]==="A"?"ok":g[0]==="B"||g[0]==="C"?"wr":"bad"}
 function tm(iso){return new Date(iso).toLocaleTimeString("en-US",{hour:"numeric",minute:"2-digit",timeZone:"America/Toronto"})+" ET"}
 function img(u,c){return u?'<img class="'+c+'" src="'+esc(u)+'" alt="" onerror="this.style.visibility=\'hidden\'">':""}
@@ -163,7 +165,7 @@ async function nbaList(){
       nbRow(g.away,o&&o.away,L?L.away:null)+nbRow(g.home,o&&o.home,L?L.home:null)+
       (t?'<div class="tot"><span>Total '+t.point+'</span><span>O '+pr(t.over)+' · U '+pr(t.under)+'</span></div>':'')+'</button>'});
     if(fin&&gs.length)h+='<p class="note">'+fin+' final game'+(fin>1?'s':'')+' hidden.</p>';
-    h+='<p class="note">Lines from DraftKings via ESPN. Tap a game for team form, rest and the 2-year head-to-head.</p>';
+    h+='<p class="note">Lines from DraftKings via ESPN. Tap a game for the model, leans, lineups, injuries, rest and the 2-year head-to-head.</p>';
     el.innerHTML=h;
     clearTimeout(LIVE_T);if(gs.some(function(g){return g.live}))LIVE_T=setTimeout(function(){if(TAB==="home"&&document.getElementById("nl"))nbaList()},60000);
   }catch(e){var el2=document.getElementById("nl");if(el2)el2.innerHTML='<p class="bad">'+esc(e.message)+'</p>'}
@@ -176,6 +178,70 @@ async function nbShow(home,away){
 }
 function nbRk(x){return x&&x.rank?'<span class="mu"> ('+x.rank+(x.rank===1?'st':x.rank===2?'nd':x.rank===3?'rd':'th')+')</span>':''}
 function nbG(g){return'<i class="g '+gc(g)+'">'+esc(g)+'</i>'}
+// ---------- model sections on the matchup page ----------
+function sg(x){return(x>0?"+":"")+x}
+function ord(n){return n+(n%100>10&&n%100<14?"th":n%10===1?"st":n%10===2?"nd":n%10===3?"rd":"th")}
+var STR={Strong:"ok",Moderate:"ok",Slight:"wr","Toss-up":"mu",Solid:"ok",Lean:"wr"};
+function nbSig(a){return a&&a.length?'<ul class="sgl">'+a.map(function(x){return'<li><b class="'+(x.d>0?'ok':'bad')+'">'+(x.d>0?'＋':'－')+'</b>'+esc(x.t)+'</li>'}).join("")+'</ul>':''}
+function nbModel(m){
+  var md=m.model,g=m.game,H=g.home.abbr,A=g.away.abbr,o=g.odds,h="";if(!md)return'<p class="note bad">Model unavailable'+(m.modelErr?': '+esc(m.modelErr):'')+'.</p>';
+  var mkSp=o&&o.home&&o.home.spread?o.home.spread.point:null,mkT=o&&o.total?o.total.point:null,ml=-md.margin;
+  var fav=function(line){return line<0?H+" "+line:line>0?A+" "+(-line):"Pick’em"};
+  h+='<h2>Celly model</h2><div class="card"><div class="tiles"><div><b>'+Math.round(md.away)+'</b><span>'+esc(A)+' projected</span></div><div><b>'+Math.round(md.home)+'</b><span>'+esc(H)+' projected</span></div></div>';
+  var bb=md.bets||[],pw=bb.filter(function(b){return b.type==="ml"&&b.side==="home"})[0];
+  h+='<div class="wrap"><table><tr><th></th><th>Model</th><th>Market</th></tr>'+
+    '<tr><td class="mu">Spread</td><td><b>'+esc(fav(Math.round(ml*2)/2))+'</b></td><td>'+(mkSp!=null?esc(fav(mkSp)):'–')+'</td></tr>'+
+    '<tr><td class="mu">Total</td><td><b>'+md.total+'</b></td><td>'+(mkT!=null?mkT:'–')+'</td></tr>'+
+    (pw?'<tr><td class="mu">'+esc(H)+' win</td><td><b>'+pct(pw.model)+'</b></td><td>'+(pw.fair!=null?pct(pw.fair):'–')+'</td></tr>':'')+'</table></div>';
+  var a=md.adj,R=md.rates;
+  h+='<details style="margin-top:8px"><summary class="lnk" style="cursor:pointer">How the projection is built</summary><div class="note">'+
+    '<p>Offense vs defense: each team’s points per 100 possessions against the other’s points allowed per 100, at the pace both teams play ('+md.poss+' possessions) → '+esc(A)+' '+a.base.away+', '+esc(H)+' '+a.base.home+'.</p>'+
+    '<p>Home court '+(a.hca?'+'+a.hca+' to '+esc(H)+' (split across both scores)':'none (neutral site)')+'. Rest and travel '+(a.rest?sg(a.rest)+' to '+esc(a.rest>0?H:A):'even')+'. '+
+    'Injuries: '+esc(H)+' missing '+a.injHome+' pts, '+esc(A)+' missing '+a.injAway+' pts of value (60% comes off their own score, 40% goes to the opponent).</p>'+
+    '<p>Early in the season last season still counts: '+esc(A)+' '+Math.round(R.away.prevW*100)+'%, '+esc(H)+' '+Math.round(R.home.prevW*100)+'% (fades as games are played). Chances use a spread of ±'+md.sd.margin+' pts on the margin and ±'+md.sd.total+' on the total, then are blended 50/50 with the market’s no-vig price.</p>'+
+    '<p>League so far: '+md.league.rtg+' pts per 100, pace '+md.league.pace+' ('+md.league.games+' games'+(md.league.ready?'':', still loading')+').</p></div></details></div>';
+  // leans
+  var L=md.lean,lrow=function(t,x,txt){return x?'<div style="padding:8px 0;border-top:1px solid var(--bd)"><div style="display:flex;justify-content:space-between;gap:8px"><span class="mu">'+t+'</span><b class="'+(STR[x.strength]||'')+'">'+esc(x.strength)+'</b></div><b>'+txt+'</b> <span class="mu">'+pct(x.p)+(x.underdog?' · underdog':'')+'</span>'+nbSig(x.signals)+'</div>':''};
+  h+='<h2>Leans</h2><div class="card">'+(md.best?'<div style="padding-bottom:8px"><span class="mu">Best bet</span><div style="display:flex;justify-content:space-between;gap:8px;align-items:baseline"><b style="font-size:16px">'+esc(md.best.label)+' '+pr(md.best.price)+'</b><b class="'+(STR[md.best.strength]||'')+'">'+md.best.strength+'</b></div><span class="mu">'+pct(md.best.p)+' to hit vs '+pct(1/(md.best.price>0?1+md.best.price/100:1+100/-md.best.price))+' implied · edge '+sg(Math.round(md.best.edge*1000)/10)+'%</span></div>':'<p class="mu" style="margin:0 0 8px">No bet clears the bar (positive edge, 52%+, not shorter than −250).</p>')+
+    lrow("Winner",L.winner,esc(L.winner.abbr)+' to win')+lrow("Spread",L.spread,L.spread?esc(L.spread.abbr)+' '+sg(L.spread.point)+' <span class="mu">(model '+esc(fav(Math.round(L.spread.modelLine*2)/2))+')</span>':'')+
+    lrow("Total",L.total,L.total?(L.total.pick==="over"?"Over ":"Under ")+L.total.line+' <span class="mu">(model '+L.total.xTotal+')</span>':'')+
+    '<p class="note">Leans are what the data says before prices. Strength = how far from a coin flip, plus 2 points for each signal that agrees (minus for each that disagrees). For testing: not betting advice.</p></div>';
+  return h;
+}
+function nbOvd(m){
+  var md=m.model,g=m.game;if(!md)return"";var A=md.rates.away,H=md.rates.home;
+  var c=function(v,rk,n){return v==null?'–':v+(rk?' <span class="mu">('+ord(rk)+')</span>':'')};
+  var row=function(l,a,b){return'<tr><td class="mu">'+l+'</td><td>'+a+'</td><td>'+b+'</td></tr>'};
+  return'<h2>Offense vs defense</h2><div class="card"><div class="wrap"><table style="white-space:normal;table-layout:fixed"><tr><th style="width:34%"></th><th>'+esc(g.away.abbr)+'</th><th>'+esc(g.home.abbr)+'</th></tr>'+
+    row("Offense <span class='mu'>pts/100</span>",c(A.ortg,A.rk.ortg),c(H.ortg,H.rk.ortg))+row("Defense <span class='mu'>allowed/100</span>",c(A.drtg,A.rk.drtg),c(H.drtg,H.rk.drtg))+
+    row("Net rating",A.net!=null?c(sg(A.net),A.rk.net):'–',H.net!=null?c(sg(H.net),H.rk.net):'–')+row("Pace <span class='mu'>poss/48</span>",c(A.paceRaw,A.rk.pace),c(H.paceRaw,H.rk.pace))+
+    row("Matchup",esc(g.away.abbr)+' O vs '+esc(g.home.abbr)+' D: <b>'+(A.rk.ortg&&H.rk.drtg?(A.rk.ortg+H.rk.drtg<=31?'edge O':'edge D'):'–')+'</b>',esc(g.home.abbr)+' O vs '+esc(g.away.abbr)+' D: <b>'+(H.rk.ortg&&A.rk.drtg?(H.rk.ortg+A.rk.drtg<=31?'edge O':'edge D'):'–')+'</b>')+
+    '</table></div><p class="note">Per-100-possession ratings from this season’s box scores (1st = best; for defense, fewest allowed). '+A.n+' and '+H.n+' games so far.</p></div>'}
+function nbRest(m){
+  var s=m.sched,g=m.game;if(!s)return"";
+  var one=function(t,x){return'<div class="pcd" style="cursor:default"><div style="display:flex;justify-content:space-between"><b>'+esc(t.abbr)+'</b><i class="g '+gc(x.grade)+'">'+x.grade+'</i></div><ul class="sgl">'+x.notes.map(function(n){return'<li>'+esc(n)+'</li>'}).join("")+'</ul></div>'};
+  return'<h2>Rest &amp; travel</h2><div class="card"><div class="pr">'+one(g.away,s.away)+one(g.home,s.home)+'</div>'+
+    (s.edge?'<p class="note"><b class="ok">Edge '+esc(s.edge.team)+'</b>: '+esc(s.edge.tired)+' is '+(s.edge.size==="notable"?'much ':'')+'more tired, worth about '+s.edge.pts+' pts in the model.</p>':'<p class="note">No real rest or travel edge.</p>')+'</div>'}
+function nbP(p){if(!p)return'<div class="pcd"></div>';var t=p.inj?'<span class="ib">'+esc((p.injLabel||p.inj).toUpperCase())+'</span>':'';
+  return'<div class="pcd'+(p.inj?' inj':'')+'" style="cursor:default'+(p.out?';opacity:.65':'')+'"><div class="pn"><b'+(p.out?' style="text-decoration:line-through"':'')+'>'+esc(ab(p.name))+'</b><span class="mu">'+esc(p.pos||"")+(p.sub?' · in for '+esc(ab(p.for)):'')+t+'</span></div>'+
+  '<div class="st"><span>MIN <b>'+p.min+'</b></span><span>PTS <b>'+p.pts+'</b></span><span>REB <b>'+p.reb+'</b></span><span>AST <b>'+p.ast+'</b></span></div>'+(p.injNote?'<div class="gn bad">'+esc(p.injNote.length>80?p.injNote.slice(0,80)+'…':p.injNote)+'</div>':'')+'</div>'}
+function ab(n){return String(n||"").replace(/^(\S)\S*\s+/,"$1. ")}
+function nbLineups(m){
+  var L=m.lineups,g=m.game;if(!L)return"";
+  var col=function(x){return(x||[]).filter(function(p){return!p.out})},gone=function(x){return(x||[]).filter(function(p){return p.out})};
+  var A=col(L.away.starters),H=col(L.home.starters),oA=gone(L.away.starters),oH=gone(L.home.starters),n=Math.max(A.length,H.length),h='<h2>Projected lineups</h2><div class="card"><div class="cols"><div class="ch">'+img(g.away.logo,"lg")+esc(g.away.abbr)+'</div><div class="ch">'+img(g.home.logo,"lg")+esc(g.home.abbr)+'</div></div>';
+  h+='<div class="pos"><span>Starters</span></div>';for(var i=0;i<n;i++)h+='<div class="pr" style="margin-bottom:8px">'+nbP(A[i])+nbP(H[i])+'</div>';
+  var no=Math.max(oA.length,oH.length);if(no){h+='<div class="pos"><span>Usual starters out</span></div>';for(var q=0;q<no;q++)h+='<div class="pr" style="margin-bottom:8px">'+nbP(oA[q])+nbP(oH[q])+'</div>'}
+  var bA=L.away.bench||[],bH=L.home.bench||[],k=Math.max(bA.length,bH.length);
+  if(k){h+='<div class="pos"><span>Bench</span></div>';for(var j=0;j<k;j++)h+='<div class="pr" style="margin-bottom:8px">'+nbP(bA[j])+nbP(bH[j])+'</div>'}
+  var lg=function(t,x){return x?esc(t)+' from '+(x.home?'vs ':'@ ')+esc(x.opp)+(x.date?' on '+new Date(x.date+"T12:00:00Z").toLocaleDateString("en-US",{month:"short",day:"numeric",timeZone:"UTC"}):'')+(x.thisSeason?'':' (last season)'):''};
+  return h+'<p class="note">Starters = each team’s starting five last game ('+lg(g.away.abbr,L.away.last)+'; '+lg(g.home.abbr,L.home.last)+'). Anyone out or doubtful is crossed out and replaced by the next man up at his position. Red box = on the injury report. Averages are this season (end of last season early on).</p></div>'}
+function nbInj(m){
+  var I=m.injuries,g=m.game;if(!I)return"";
+  var one=function(t,x){return'<div style="margin-bottom:8px"><div style="display:flex;justify-content:space-between"><b>'+esc(t.abbr)+'</b><span class="mu">'+(x.pts?'−'+x.pts+' pts':'no impact')+'</span></div>'+
+    (x.rows.length?x.rows.map(function(r){return'<div class="nwx"><div><b>'+esc(r.name)+'</b> <span class="kd '+(r.key==="out"||r.key==="suspension"?'new':'status')+'">'+esc(r.status)+'</span><div class="mu" style="font-size:12px">'+esc(r.detail||'')+(r.ret?' · est. return '+esc(String(r.ret).slice(0,10)):'')+'</div></div><span>'+(r.min!=null?r.pts+' ppg · '+r.min+' min<br>':'')+'<b>'+(r.cost?'−'+r.cost:'0')+'</b> pts'+(r.share!=null&&r.share<1?'<br><span style="font-size:11px">'+Math.round((1-r.share)*100)+'% already priced in</span>':'')+'</span></div>'}).join(""):'<p class="mu" style="margin:4px 0">Nobody listed.</p>')+'</div>'};
+  return'<h2>Injuries</h2><div class="card">'+(I.ok?one(g.away,I.away)+one(g.home,I.home):'<p class="mu">Injury report unavailable right now.</p>')+
+    '<p class="note">From the ESPN injury report. Cost = what the player is worth over a replacement in his minutes × chance he sits (Out 100%, Doubtful 80%, Questionable 45%, Day-to-day 30%). Games he has already missed are in the team’s numbers, so that part isn’t counted twice.</p></div>'}
 function nbDraw(){
   var m=NM,g=m.game,o=g.odds,T=m.teams,A=T.away,H=T.home,dt=new Date(g.start).toLocaleDateString("en-US",{weekday:"short",month:"short",day:"numeric",timeZone:"America/Toronto"});
   var fav=o&&o.home.spread&&o.home.spread.point!=null?(o.home.spread.point<0?[g.home.abbr,o.home.spread.point]:o.home.spread.point>0?[g.away.abbr,-o.home.spread.point]:["Pick’em",""]):null;
@@ -186,6 +252,7 @@ function nbDraw(){
   h+='<h2>Odds</h2><div class="card">'+(o?'<div class="wrap"><table><tr><th>Team</th><th>Moneyline</th><th>Spread</th></tr>'+
     [["away",g.away],["home",g.home]].map(function(x){var s=o[x[0]];return'<tr><td class="t">'+esc(x[1].abbr)+'</td><td>'+pr(s.ml)+'</td><td>'+nbSp(s)+'</td></tr>'}).join("")+
     (o.total?'<tr><td class="t">Total</td><td colspan="2">'+o.total.point+' · O '+pr(o.total.over)+' / U '+pr(o.total.under)+'</td></tr>':'')+'</table></div><p class="note">'+esc(o.book)+' lines via ESPN.</p>':'<p class="mu" style="margin:0">No lines posted yet.</p>')+'</div>';
+  h+=nbModel(m)+nbOvd(m)+nbRest(m);
   // team comparison
   var row=function(l,a,b){return'<tr><td class="mu">'+l+'</td><td>'+a+'</td><td>'+b+'</td></tr>'};
   var rs=function(t){var r=t.rest||{};return r.b2b||r.threeInFour?'<span class="bad">'+esc(r.note)+'</span>':esc(r.note||"–")};
@@ -201,6 +268,7 @@ function nbDraw(){
   h+='<p class="note">Grades rank each team’s scoring and defence against the league and against tonight’s opponent (A = top 4, F = bottom 4).'+
     (pw>0?' Early season: last season still counts up to '+Math.round(pw*100)+'% of the per-game numbers and fades out by game 20.':'')+
     (A.formFromLast||H.formFromLast?' Form includes the end of last season until a team has played 5 games.':'')+'</p></div>';
+  h+=nbLineups(m)+nbInj(m);
   // head-to-head
   var S=m.h2hSum,hd=m.h2h;
   h+='<h2>Head-to-head · last 2 years</h2><div class="card">';
@@ -215,7 +283,7 @@ function nbDraw(){
       (m.marketTotal!=null?'<td class="'+(r.vsToday==="Over"?"ok":r.vsToday==="Under"?"bad":"")+'">'+(r.vsToday||"–")+'</td>':'')+'</tr>'}).join("")+'</table></div>';
     h+='<p class="note">ATS is '+esc(g.home.abbr)+'’s result against that game’s closing spread (shown in brackets). Total shows O/U against that game’s closing total'+(m.marketTotal!=null?', and the last column against tonight’s line':'')+'. Bold = winner.</p>';
   }
-  h+='</div><p class="note">Player props, injuries, lineups, rest and travel edges are coming in the next stages.</p>';
+  h+='</div><p class="note">Player props are the next stage.</p>';
   app.innerHTML=h;
 }
 
