@@ -54,7 +54,7 @@ function snapshot(m) {
     at: new Date().toISOString(),
     odds: { book: o.book || null, homeMl: o.home ? o.home.ml : null, awayMl: o.away ? o.away.ml : null, homeSpread: o.home && o.home.spread ? o.home.spread.point : null,
       total: o.total ? o.total.point : null },
-    model: { home: md.home, away: md.away, margin: md.margin, total: md.total, rest: md.adj.rest, injHome: md.adj.injHome, injAway: md.adj.injAway, games: md.league.games },
+    model: { home: md.home, away: md.away, margin: md.margin, total: md.total, rest: md.adj.rest, injHome: md.adj.injHome, injAway: md.adj.injAway, games: md.league.games, lgRtg: md.league.rtg, lgPace: md.league.pace, poss: md.poss },
     best: b ? { kind: b.type, side: b.side, pick: b.side === "over" || b.side === "under" ? b.side : undefined, label: b.label, price: b.price, point: b.point, line: b.line,
       p: b.p, edge: b.edge, strength: b.strength } : null,
     winner: w ? { kind: "ml", side: w.side, abbr: w.abbr, price: price(w.side, "ml"), p: w.p, strength: w.strength, score: w.score, underdog: !!w.underdog } : null,
