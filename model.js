@@ -38,10 +38,17 @@ module.exports = ({ getJSON, r2, teamGames, pool, seasonYr, etDate }) => {
   // team: [pts, fga, fta, oreb, tov, min, fgm, 3pm, 3pa, ftm, reb, ast]
   // player: [id, name, pos, starter, min, pts, reb, ast, 3pm, stl, blk, tov, fga, fta]
   const BOX = new Map(), boxBusy = new Map();
+  // ESPN game summaries are large (often several MB once parsed). Only 2 are downloaded and parsed at a time, and only the
+  // few numbers we need are kept, so the NBA side can't run the server out of memory (Oct 31: it did, on Celly's 512 MB plan).
+  let rawN = 0; const rawQ = [];
   async function fetchRaw(url) {
-    const r = await fetch(url, { headers: { "User-Agent": "nba-handicapper/0.2" } });
-    if (!r.ok) throw new Error(`${r.status} ${url}`);
-    return r.json();
+    if (rawN >= 2) await new Promise(ok => rawQ.push(ok));
+    rawN++;
+    try {
+      const r = await fetch(url, { headers: { "User-Agent": "nba-handicapper/0.2" } });
+      if (!r.ok) throw new Error(`${r.status} ${url}`);
+      return await r.json();
+    } finally { rawN--; const nx = rawQ.shift(); if (nx) nx(); }
   }
   function cutBox(id, j) {
     const comp = ((j.header || {}).competitions || [])[0] || {}, cs = comp.competitors || [];
@@ -205,10 +212,13 @@ module.exports = ({ getJSON, r2, teamGames, pool, seasonYr, etDate }) => {
 
   // ---------- injuries (from the game's ESPN summary) ----------
   const stKey = s => { s = String(s || "").toLowerCase(); return /suspen/.test(s) ? "suspension" : /out/.test(s) ? "out" : /doubt/.test(s) ? "doubtful" : /question/.test(s) ? "questionable" : /day/.test(s) ? "day-to-day" : /probable/.test(s) ? "probable" : s || "out"; };
+  const INJC = new Map();
   async function injuries(eventId, abbrs) {
+    const key = eventId + "|" + abbrs.join(","), hit = INJC.get(key);
+    if (hit && hit.exp > Date.now()) return hit.data;
     const out = {}; abbrs.forEach(a => out[a] = []);
     let j = null;
-    try { j = await getJSON(`${SITE}/summary?event=${eventId}`, 600); } catch (e) { return { list: out, ok: false }; }
+    try { const x = await fetchRaw(`${SITE}/summary?event=${eventId}`); j = { injuries: x.injuries || [] }; } catch (e) { return { list: out, ok: false }; }
     for (const t of j.injuries || []) {
       const tm = t.team || {}, a = ab(tm.abbreviation) || abbrs.find(x => IDS[x] === +tm.id);
       if (!a || !out[a]) continue;
@@ -220,7 +230,9 @@ module.exports = ({ getJSON, r2, teamGames, pool, seasonYr, etDate }) => {
           note: x.shortComment || x.longComment || "", ret: d.returnDate || null, img: (at.headshot || {}).href || null });
       }
     }
-    return { list: out, ok: true };
+    const data = { list: out, ok: true }; INJC.set(key, { data, exp: Date.now() + 600e3 });
+    if (INJC.size > 60) for (const [kk, v] of INJC) if (v.exp < Date.now()) INJC.delete(kk);
+    return data;
   }
 
   // ---------- projected starters: last game's starting five, injured players swapped for the next man up ----------
@@ -509,10 +521,16 @@ module.exports = ({ getJSON, r2, teamGames, pool, seasonYr, etDate }) => {
     const w = res.filter(r => r === "W").length, l10 = res.slice(0, 10);
     return { code: res[0] || null, n, rec: `${w}-${res.length - w}`, l10: `${l10.filter(r => r === "W").length}-${l10.filter(r => r === "L").length}` };
   }
+  const PROPB = new Map();
   async function props(games, date, tb) {
     const hit = PROPC.get(date); if (hit && hit.exp > Date.now()) return hit.data;
+    if (PROPB.has(date)) return PROPB.get(date);   // Props and Streaks opened together share one build
+    const run = propsBuild(games, date, tb).finally(() => PROPB.delete(date));
+    PROPB.set(date, run); return run;
+  }
+  async function propsBuild(games, date, tb) {
     const yr = seasonYr(new Date(date + "T12:00:00Z")), lg = await league(yr, 25000), out = [], teams = [];
-    await pool(games.filter(g => g.state === "FUT" || g.state === "LIVE"), 3, async g => {
+    await pool(games.filter(g => g.state === "FUT" || g.state === "LIVE"), 2, async g => {
       const H = g.home.abbr, A = g.away.abbr;
       const [bh, ba, sh, sa, inj] = await Promise.all([teamBoxes(H, yr), teamBoxes(A, yr), IDS[H] ? teamGames(IDS[H], yr) : [], IDS[A] ? teamGames(IDS[A], yr) : [], injuries(g.id, [H, A])]);
       const fat = { home: fatigue(sh, H, H, date), away: fatigue(sa, A, H, date) };

@@ -66,11 +66,14 @@ module.exports = ({ getJSON, r2 }) => {
   }
 
   // ---------- team results ----------
+  // schedules are kept cut down (a few fields per game), not as ESPN's full pages
+  const SCH = new Map();
   async function teamGames(id, yr) {   // regular season + playoffs, oldest first
-    const ttl = yr >= seasonYr(new Date()) ? 1800 : 86400;
-    const get = t => getJSON(`${SITE}/teams/${id}/schedule?season=${yr}&seasontype=${t}`, ttl).catch(() => ({ events: [] }));
+    const key = id + "|" + yr, ttl = yr >= seasonYr(new Date()) ? 1800 : 86400, hit = SCH.get(key);
+    if (hit && hit.exp > Date.now()) return hit.data;
+    const get = async t => { try { const r = await fetch(`${SITE}/teams/${id}/schedule?season=${yr}&seasontype=${t}`, { headers: { "User-Agent": "nba-handicapper/0.2" } }); return r.ok ? await r.json() : { events: [] }; } catch (e) { return { events: [] }; } };
     const [r, p] = await Promise.all([get(2), get(3)]);
-    return [...(r.events || []), ...(p.events || [])].map(ev => {
+    const data = [...(r.events || []), ...(p.events || [])].map(ev => {
       const c = (ev.competitions || [])[0] || {}, ty = (c.status || {}).type || {};
       const s = k => (c.competitors || []).find(x => x.homeAway === k) || {};
       const sc = x => x.score == null ? null : +(typeof x.score === "object" ? x.score.value : x.score);
@@ -78,6 +81,8 @@ module.exports = ({ getJSON, r2 }) => {
       return { id: ev.id, date: ev.date, done: !!ty.completed, playoff: (ev.seasonType || {}).type === 3,
         home: (H.team || {}).abbreviation, away: (A.team || {}).abbreviation, hs: sc(H), as: sc(A) };
     }).filter(g => g.home && g.away).sort((a, b) => a.date.localeCompare(b.date));
+    SCH.set(key, { data, exp: Date.now() + ttl * 1000 });
+    return data;
   }
 
   // closing spread (home team's) and total of a past game
