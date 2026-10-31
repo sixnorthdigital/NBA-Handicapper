@@ -190,5 +190,8 @@ module.exports = ({ getJSON, r2 }) => {
   const model = require("./model")({ getJSON, r2, teamGames, pool, seasonYr, etDate });
   const warm = () => model.league(seasonYr(new Date()), 0).catch(() => {});   // build the league table in the background
 
-  return { games, matchup, warm, dumpBoxes: model.dumpBoxes, loadBoxes: model.loadBoxes };
+  // player props for a day's slate (model.js), with the standings table the game model needs
+  async function props(date) { const yr = seasonYr(new Date(date + "T12:00:00Z")), [gs, tb] = await Promise.all([games(date), table(yr)]); return model.props(gs, date, tb); }
+
+  return { games, matchup, props, warm, dumpBoxes: model.dumpBoxes, loadBoxes: model.loadBoxes };
 };

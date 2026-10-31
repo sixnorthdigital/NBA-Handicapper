@@ -30,6 +30,7 @@ http.createServer(async (req, res) => {
     if (u.pathname.startsWith("/api/nba/")) {
       const d = q.get("date") || today(); if (!/^\d{4}-\d\d-\d\d$/.test(d)) return send(res, 400, { error: "Bad date" });
       if (u.pathname === "/api/nba/games") return send(res, 200, await nba.games(d));
+      if (u.pathname === "/api/nba/props") return send(res, 200, await nba.props(d));
       if (u.pathname === "/api/nba/matchup") return send(res, 200, await nba.matchup(q.get("home"), q.get("away"), d));
       return send(res, 404, { error: "Not found" });
     }

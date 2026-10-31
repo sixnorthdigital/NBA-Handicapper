@@ -128,11 +128,42 @@ module.exports = ({ getJSON, r2, teamGames, pool, seasonYr, etDate }) => {
         const rk = (k, low) => Object.keys(teams).filter(a => teams[a].n).sort((x, y) => low ? teams[x][k] - teams[y][k] : teams[y][k] - teams[x][k]).forEach((a, i) => (teams[a].rk = teams[a].rk || {})[k] = i + 1);
         Object.values(teams).forEach(t => { if (t.n) t.net = t.ortg - t.drtg; });
         rk("ortg"); rk("drtg", true); rk("pace"); rk("net");
+        LG.dvp = dvpTable(by);
       } catch (e) { console.error("league build:", e.message); }
       finally { LG.busy = null; }
       return LG;
     })();
     return LG.busy;
+  }
+  // ---------- defense vs position: what each team gives up per game to guards, forwards and centres ----------
+  // ratio = allowed / league average for that position (pulled toward 1 with 8 games of weight); rank 1 = gives up the most (best for overs)
+  const DV = ["pts", "reb", "ast", "tpm", "stl", "blk"], DVI = { pts: 5, reb: 6, ast: 7, tpm: 8, stl: 9, blk: 10 };
+  function dvpTable(by) {
+    const D = {};
+    for (const a of Object.keys(IDS)) {
+      const d = D[a] = { G: { n: 0 }, F: { n: 0 }, C: { n: 0 } };
+      for (const id of by[a] || []) {
+        const b = BOX.get(id); if (!b) continue;
+        const opp = a === b.home ? b.away : b.home, seen = {};
+        for (const x of b.p[opp] || []) { const g = grp(x[2]); seen[g] = 1; for (const k of DV) d[g][k] = (d[g][k] || 0) + x[DVI[k]]; }
+        for (const g of ["G", "F", "C"]) d[g].n++;
+      }
+    }
+    const out = {}, avg = {};
+    for (const g of ["G", "F", "C"]) for (const k of DV) {
+      const vals = Object.keys(D).filter(a => D[a][g].n).map(a => (D[a][g][k] || 0) / D[a][g].n);
+      avg[g + k] = vals.length ? vals.reduce((t, v) => t + v, 0) / vals.length : null;
+    }
+    for (const a of Object.keys(D)) {
+      out[a] = {};
+      for (const g of ["G", "F", "C"]) {
+        out[a][g] = {}; const n = D[a][g].n;
+        for (const k of DV) { const pg = n ? (D[a][g][k] || 0) / n : null, L = avg[g + k], raw = pg != null && L ? pg / L : 1;
+          out[a][g][k] = { pg: pg == null ? null : r1(pg), r: r3((n * raw + 8) / (n + 8)), n }; }
+      }
+    }
+    for (const g of ["G", "F", "C"]) for (const k of DV) Object.keys(out).filter(a => out[a][g][k].n).sort((x, y) => out[y][g][k].pg - out[x][g][k].pg).forEach((a, i) => out[a][g][k].rk = i + 1);
+    return out;
   }
   async function league(yr, waitMs) {   // fresh within 30 min; otherwise rebuild (wait up to waitMs for it)
     if (LG.yr === yr && Date.now() - LG.at < 1800e3) return LG;
@@ -372,8 +403,112 @@ module.exports = ({ getJSON, r2, teamGames, pool, seasonYr, etDate }) => {
     };
   }
 
+
+  // ---------- player props ----------
+  // Projection for each stat = projected minutes x per-minute rate x matchup.
+  //   Minutes: season / last 10 / last 5 blend, + minutes left by teammates who are out (same position first),
+  //            - blowout risk when the spread is 9+ (starters sit late), - a little on the 2nd night of a back-to-back.
+  //   Rate:    per-minute production, recent games weighted up, last season's games at half weight.
+  //   Matchup: points follow the game model's projected team score vs the team's average, tilted by how the opponent
+  //            defends his position; other stats use pace x defense vs position. Missing teammates' shots, assists and
+  //            rebounds are shared out (usage bump).
+  // Spread of outcomes: his own game-to-game spread, pulled toward a typical spread for that stat.
+  const PI = { min: 3, pts: 4, reb: 5, ast: 6, tpm: 7, stl: 8, blk: 9, tov: 10, fga: 11, fta: 12 };
+  const SDK = { pts: 1.45, reb: .95, ast: .95, tpm: 1, stl: 1, blk: 1, pra: 1.35, pr: 1.25, pa: 1.3, ra: 1, sb: 1 };
+  const COMBO = { pra: ["pts", "reb", "ast"], pr: ["pts", "reb"], pa: ["pts", "ast"], ra: ["reb", "ast"], sb: ["stl", "blk"] };
+  const OUTW = { out: 1, suspension: 1, doubtful: .8 };
+  const PROPC = new Map();
+  function teamProps(g, side, me, op, bx, P, inj, lg, pj, fat, homeSpread) {
+    const injBy = {}; inj.forEach(x => { injBy[x.id] = x; injBy["n:" + x.name.toLowerCase()] = x; });
+    const flag = q => injBy[q.id] || injBy["n:" + String(q.name).toLowerCase()];
+    // game logs from this team's box scores, newest first: [last season 0/1, opp, home 1/0, min, pts, reb, ast, 3pm, stl, blk, tov, fga, fta, date]
+    const logs = {};
+    const add = (b, k) => (b.p[me] || []).forEach(r => (logs[r[0]] = logs[r[0]] || []).push([k, me === b.home ? b.away : b.home, me === b.home ? 1 : 0,
+      r[4], r[5], r[6], r[7], r[8], r[9], r[10], r[11], r[12], r[13], b.date ? etDate(b.date) : null]));
+    bx.cur.forEach(b => add(b, 0)); bx.prev.forEach(b => add(b, 1));
+    const avg = (a, i) => a.length ? a.reduce((t, r) => t + r[i], 0) / a.length : 0;
+    const recent = bx.cur.length ? bx.cur.slice(0, 5) : bx.prev.slice(0, 5);
+    const roster = Object.values(P).filter(q => logs[q.id] && (bx.cur.length ? q.gC >= 1 : q.gP >= 1)).map(q => {
+      const L = logs[q.id], src = L.filter(r => r[0] === 0).length >= 3 ? L.filter(r => r[0] === 0) : L;
+      const base = .4 * avg(src, PI.min) + .4 * avg(src.slice(0, 10), PI.min) + .2 * avg(src.slice(0, 5), PI.min);
+      const L10 = L.slice(0, 10), f = flag(q), w = f ? OUTW[f.key] || 0 : 0;
+      // a player who has already been missing is already out of his teammates' recent numbers: only new absences move minutes
+      const pres = recent.length ? recent.filter(b => (b.p[me] || []).some(r => r[0] === q.id)).length / recent.length : 0;
+      return { q, L, base, f, w, pres, g: grp(q.pos), use: avg(L10, PI.fga) + .44 * avg(L10, PI.fta) + avg(L10, PI.tov), ast: avg(L10, PI.ast), reb: avg(L10, PI.reb) };
+    });
+    const outs = roster.filter(r => r.w > 0), ins = roster.filter(r => r.w < .5 && r.base >= 6);
+    const vac = { G: 0, F: 0, C: 0 }; let vUse = 0, vAst = 0, vReb = 0;
+    outs.forEach(r => { const k = r.w * r.pres; vac[r.g] += r.base * k; vUse += r.use * k; vAst += r.ast * k; vReb += r.reb * k; });
+    const bump = {};
+    for (const gr of ["G", "F", "C"]) {   // vacated minutes go to the same position first, by minutes played; anything left to the other spots
+      let left = vac[gr];
+      // shared by room to grow: a 34-minute starter gains little, the next man up gains most (max +10 each, nobody past 38)
+      const room = r => Math.max(0, 38 - r.base - (bump[r.q.id] || 0));
+      const take = list => { const tot = list.reduce((t, r) => t + room(r), 0); if (!tot) return; let used = 0;
+        list.forEach(r => { const add = Math.min(10 - (bump[r.q.id] || 0), room(r), left * room(r) / tot); if (add > 0) { bump[r.q.id] = (bump[r.q.id] || 0) + add; used += add; } }); left -= used; };
+      take(ins.filter(r => r.g === gr)); if (left > .5) take(ins.filter(r => r.g !== gr));
+    }
+    const sum = (k) => ins.reduce((t, r) => t + r[k], 0);
+    const fUse = cl(1 + .4 * vUse / (sum("use") || 1), 1, 1.3), fAst = cl(1 + .4 * vAst / (sum("ast") || 1), 1, 1.3), fReb = cl(1 + .3 * vReb / (sum("reb") || 1), 1, 1.25);
+    const T = lg.teams[me] || {}, O = lg.teams[op] || {}, teamPts = side === "home" ? pj.home : pj.away;
+    const fPace = cl(pj.poss / (T.pace || lg.pace), .9, 1.1), fEnv = T.ppg ? cl(teamPts / T.ppg, .88, 1.12) : cl(teamPts / (lg.rtg * lg.pace / 100), .88, 1.12);
+    const lgPpg = lg.rtg * lg.pace / 100, oppAllow = O.oppg ? O.oppg / lgPpg : 1;
+    const ab_ = Math.abs(homeSpread || 0), favoured = side === "home" ? homeSpread < 0 : homeSpread > 0;
+    const out = [];
+    for (const r of ins) {
+      const q = r.q, L = r.L, f = r.f;
+      if (f && (f.key === "out" || f.key === "suspension" || f.key === "doubtful")) continue;
+      const notes = [];
+      let m = r.base + (bump[q.id] || 0);
+      if (bump[q.id] >= .5) notes.push(`+${r1(bump[q.id])} min with ${outs.filter(o => o.pres > 0).map(o => o.q.name.split(" ").slice(-1)[0]).join(", ")} out`);
+      if (ab_ >= 9) { if (r.base >= 28) { const cut = r.base * Math.min(.08, .012 * (ab_ - 8)); m -= cut; notes.push(`−${r1(cut)} min blowout risk (${favoured ? "favoured" : "underdog"} by ${ab_})`); }
+        else if (r.base < 20) { m += r.base * .04; notes.push(`+${r1(r.base * .04)} min garbage time (spread ${ab_})`); } }
+      if (fat.days === 1 && r.base >= 30) { m -= r.base * .03; notes.push(`−${r1(r.base * .03)} min back-to-back`); }
+      m = cl(m, 0, 42);
+      if (m < 10) continue;
+      const dv = lg.dvp && lg.dvp[op] && lg.dvp[op][r.g] || {};
+      const lam = {}, sd = {}, why = { pace: r2(fPace), env: r2(fEnv), use: r2(fUse), astB: r2(fAst), rebB: r2(fReb), dvp: {} };
+      for (const k of ["pts", "reb", "ast", "tpm", "stl", "blk"]) {
+        let num = 0, den = 0;
+        L.forEach((x, i) => { const w = (x[0] ? .5 : 1) * (i < 5 ? 1.6 : i < 10 ? 1.3 : 1); num += w * x[PI[k]]; den += w * x[PI.min]; });
+        const rate = den ? num / den : 0, d = dv[k], fd = d ? cl(d.r, .85, 1.15) : 1;
+        let mult = k === "pts" ? fEnv * cl(fd / oppAllow, .9, 1.1) * fUse : k === "tpm" ? fPace * fd * fUse : k === "ast" ? fPace * fd * fAst : k === "reb" ? fPace * fd * fReb : fPace * fd;
+        lam[k] = m * rate * mult;
+        if (d) why.dvp[k] = { r: d.r, rk: d.rk, pg: d.pg };
+      }
+      for (const [c, parts] of Object.entries(COMBO)) lam[c] = parts.reduce((t, k) => t + lam[k], 0);
+      const full = L.filter(x => x[PI.min] >= .6 * r.base).slice(0, 20), n = full.length;
+      for (const k of Object.keys(lam)) {
+        const vals = full.map(x => (COMBO[k] || [k]).reduce((t, kk) => t + x[PI[kk]], 0)), mu = vals.length ? vals.reduce((t, v) => t + v, 0) / vals.length : 0;
+        const emp = n > 1 ? Math.sqrt(vals.reduce((t, v) => t + (v - mu) ** 2, 0) / (n - 1)) : 0, prior = SDK[k] * Math.sqrt(Math.max(lam[k], .3));
+        sd[k] = r2(Math.sqrt((n * emp * emp + 8 * prior * prior) / (n + 8)));
+        lam[k] = r2(lam[k]);
+      }
+      out.push({ id: q.id, name: q.name, pos: q.pos, grp: r.g, team: me, opp: op, home: side === "home", gid: g.id, start: g.start,
+        img: `https://a.espncdn.com/i/headshots/nba/players/full/${q.id}.png`, inj: f ? f.key : null, injNote: f ? [f.status, f.detail].filter(Boolean).join(" · ") : null,
+        min: { proj: r1(m), base: r1(r.base), notes }, lam, sd, why, gp: q.gC, games: L.slice(0, 40) });
+    }
+    return out;
+  }
+  async function props(games, date, tb) {
+    const hit = PROPC.get(date); if (hit && hit.exp > Date.now()) return hit.data;
+    const yr = seasonYr(new Date(date + "T12:00:00Z")), lg = await league(yr, 25000), out = [];
+    await pool(games.filter(g => g.state === "FUT" || g.state === "LIVE"), 3, async g => {
+      const H = g.home.abbr, A = g.away.abbr;
+      const [bh, ba, sh, sa, inj] = await Promise.all([teamBoxes(H, yr), teamBoxes(A, yr), IDS[H] ? teamGames(IDS[H], yr) : [], IDS[A] ? teamGames(IDS[A], yr) : [], injuries(g.id, [H, A])]);
+      const fat = { home: fatigue(sh, H, H, date), away: fatigue(sa, A, H, date) };
+      const PH = players(H, bh.cur, bh.prev), PA = players(A, ba.cur, ba.prev);
+      const ic = { home: injCost(H, inj.list[H], PH, bh.cur.length), away: injCost(A, inj.list[A], PA, ba.cur.length) };
+      const pj = project(g, lg, tb, fat, ic), hs = g.odds && g.odds.home && g.odds.home.spread ? g.odds.home.spread.point : -pj.margin;
+      out.push(...teamProps(g, "home", H, A, bh, PH, inj.list[H] || [], lg, pj, fat.home, hs), ...teamProps(g, "away", A, H, ba, PA, inj.list[A] || [], lg, pj, fat.away, hs));
+    });
+    const data = { date, players: out, league: { games: lg.games, ready: lg.ready } };
+    if (lg.ready) PROPC.set(date, { data, exp: Date.now() + 600e3 });
+    return data;
+  }
+
   // box-score cache in/out, so the tracker can keep it between runs
   function dumpBoxes() { return Object.fromEntries(BOX); }
   function loadBoxes(o) { for (const [k, v] of Object.entries(o || {})) if (v && v.t) BOX.set(k, v); return BOX.size; }
-  return { analyse, league, box, dumpBoxes, loadBoxes, IDS, GEO };
+  return { analyse, props, league, box, dumpBoxes, loadBoxes, IDS, GEO };
 };
