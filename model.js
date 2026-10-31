@@ -418,7 +418,7 @@ module.exports = ({ getJSON, r2, teamGames, pool, seasonYr, etDate }) => {
   const COMBO = { pra: ["pts", "reb", "ast"], pr: ["pts", "reb"], pa: ["pts", "ast"], ra: ["reb", "ast"], sb: ["stl", "blk"] };
   const OUTW = { out: 1, suspension: 1, doubtful: .8 };
   const PROPC = new Map();
-  function teamProps(g, side, me, op, bx, P, inj, lg, pj, fat, homeSpread) {
+  function teamProps(g, side, me, op, bx, P, inj, lg, pj, fat, homeSpread, vsB) {
     const injBy = {}; inj.forEach(x => { injBy[x.id] = x; injBy["n:" + x.name.toLowerCase()] = x; });
     const flag = q => injBy[q.id] || injBy["n:" + String(q.name).toLowerCase()];
     // game logs from this team's box scores, newest first: [last season 0/1, opp, home 1/0, min, pts, reb, ast, 3pm, stl, blk, tov, fga, fta, date]
@@ -484,11 +484,30 @@ module.exports = ({ getJSON, r2, teamGames, pool, seasonYr, etDate }) => {
         sd[k] = r2(Math.sqrt((n * emp * emp + 8 * prior * prior) / (n + 8)));
         lam[k] = r2(lam[k]);
       }
-      out.push({ id: q.id, name: q.name, pos: q.pos, grp: r.g, team: me, opp: op, home: side === "home", gid: g.id, start: g.start,
+      // meetings with tonight's opponent (this season + the 3 before it), same row layout as the game log, newest first
+      const yr0 = seasonYr(new Date(g.start)), vs = [];
+      (vsB || []).forEach(b => { const x = (b.p[me] || []).find(z => z[0] === q.id); if (!x) return; const y = b.date ? seasonYr(new Date(b.date)) : yr0;
+        vs.push([y === yr0 ? 0 : 1, op, me === b.home ? 1 : 0, x[4], x[5], x[6], x[7], x[8], x[9], x[10], x[11], x[12], x[13], b.date ? etDate(b.date) : null, yr0 - y]); });
+      out.push({ id: q.id, name: q.name, pos: q.pos, grp: r.g, team: me, opp: op, home: side === "home", gid: g.id, start: g.start, vs,
         img: `https://a.espncdn.com/i/headshots/nba/players/full/${q.id}.png`, inj: f ? f.key : null, injNote: f ? [f.status, f.detail].filter(Boolean).join(" · ") : null,
         min: { proj: r1(m), base: r1(r.base), notes }, lam, sd, why, gp: q.gC, games: L.slice(0, 40) });
     }
     return out;
+  }
+  // every meeting between the two teams in the last 4 seasons (playoffs included), newest first
+  async function h2hBoxes(H, A, yr) {
+    if (!IDS[H]) return [];
+    const ids = new Set();
+    for (let y = yr; y > yr - 4; y--) (await teamGames(IDS[H], y)).forEach(x => { if (x.done && (x.home === A || x.away === A)) ids.add(String(x.id)); });
+    return (await pool([...ids], 4, box)).filter(Boolean).sort((a, b) => String(b.date).localeCompare(String(a.date)));
+  }
+  // current win / loss streak, record and last 10 from the team's schedule (games before tonight)
+  function teamStreak(all, abbr, date) {
+    const gs = all.filter(x => x.done && !x.playoff && etDate(x.date) < date).sort((a, b) => b.date.localeCompare(a.date));
+    const res = gs.map(x => { const h = ab(x.home) === abbr; return (h ? x.hs > x.as : x.as > x.hs) ? "W" : "L"; });
+    let n = 0; while (n < res.length && res[n] === res[0]) n++;
+    const w = res.filter(r => r === "W").length, l10 = res.slice(0, 10);
+    return { code: res[0] || null, n, rec: `${w}-${res.length - w}`, l10: `${l10.filter(r => r === "W").length}-${l10.filter(r => r === "L").length}` };
   }
   async function props(games, date, tb) {
     const hit = PROPC.get(date); if (hit && hit.exp > Date.now()) return hit.data;
@@ -500,12 +519,14 @@ module.exports = ({ getJSON, r2, teamGames, pool, seasonYr, etDate }) => {
       const PH = players(H, bh.cur, bh.prev), PA = players(A, ba.cur, ba.prev);
       const ic = { home: injCost(H, inj.list[H], PH, bh.cur.length), away: injCost(A, inj.list[A], PA, ba.cur.length) };
       const pj = project(g, lg, tb, fat, ic), hs = g.odds && g.odds.home && g.odds.home.spread ? g.odds.home.spread.point : -pj.margin;
-      out.push(...teamProps(g, "home", H, A, bh, PH, inj.list[H] || [], lg, pj, fat.home, hs), ...teamProps(g, "away", A, H, ba, PA, inj.list[A] || [], lg, pj, fat.away, hs));
+      const vsB = await h2hBoxes(H, A, yr).catch(() => []);
+      out.push(...teamProps(g, "home", H, A, bh, PH, inj.list[H] || [], lg, pj, fat.home, hs, vsB), ...teamProps(g, "away", A, H, ba, PA, inj.list[A] || [], lg, pj, fat.away, hs, vsB));
       // Teams view: the game model's moneyline / spread / total chances against DraftKings, same as the matchup page's Leans
       const b = bets(g, pj, { fat, inj: ic, form: {}, h2h: [] });
       teams.push({ id: g.id, start: g.start, state: g.state, home: g.home, away: g.away, odds: g.odds || null,
         proj: { home: pj.home, away: pj.away, margin: pj.margin, total: pj.total, poss: pj.poss }, rest: { home: fat.home.score, away: fat.away.score },
-        inj: { home: ic.home.pts, away: ic.away.pts }, bets: b.bets, best: b.best, lean: b.lean });
+        inj: { home: ic.home.pts, away: ic.away.pts }, bets: b.bets, best: b.best, lean: b.lean,
+        streak: { home: teamStreak(sh, H, date), away: teamStreak(sa, A, date) }, meetings: vsB.length });
     });
     teams.sort((x, y) => String(x.start).localeCompare(String(y.start)));
     const data = { date, players: out, teams, league: { games: lg.games, ready: lg.ready } };
