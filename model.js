@@ -492,7 +492,7 @@ module.exports = ({ getJSON, r2, teamGames, pool, seasonYr, etDate }) => {
   }
   async function props(games, date, tb) {
     const hit = PROPC.get(date); if (hit && hit.exp > Date.now()) return hit.data;
-    const yr = seasonYr(new Date(date + "T12:00:00Z")), lg = await league(yr, 25000), out = [];
+    const yr = seasonYr(new Date(date + "T12:00:00Z")), lg = await league(yr, 25000), out = [], teams = [];
     await pool(games.filter(g => g.state === "FUT" || g.state === "LIVE"), 3, async g => {
       const H = g.home.abbr, A = g.away.abbr;
       const [bh, ba, sh, sa, inj] = await Promise.all([teamBoxes(H, yr), teamBoxes(A, yr), IDS[H] ? teamGames(IDS[H], yr) : [], IDS[A] ? teamGames(IDS[A], yr) : [], injuries(g.id, [H, A])]);
@@ -501,8 +501,14 @@ module.exports = ({ getJSON, r2, teamGames, pool, seasonYr, etDate }) => {
       const ic = { home: injCost(H, inj.list[H], PH, bh.cur.length), away: injCost(A, inj.list[A], PA, ba.cur.length) };
       const pj = project(g, lg, tb, fat, ic), hs = g.odds && g.odds.home && g.odds.home.spread ? g.odds.home.spread.point : -pj.margin;
       out.push(...teamProps(g, "home", H, A, bh, PH, inj.list[H] || [], lg, pj, fat.home, hs), ...teamProps(g, "away", A, H, ba, PA, inj.list[A] || [], lg, pj, fat.away, hs));
+      // Teams view: the game model's moneyline / spread / total chances against DraftKings, same as the matchup page's Leans
+      const b = bets(g, pj, { fat, inj: ic, form: {}, h2h: [] });
+      teams.push({ id: g.id, start: g.start, state: g.state, home: g.home, away: g.away, odds: g.odds || null,
+        proj: { home: pj.home, away: pj.away, margin: pj.margin, total: pj.total, poss: pj.poss }, rest: { home: fat.home.score, away: fat.away.score },
+        inj: { home: ic.home.pts, away: ic.away.pts }, bets: b.bets, best: b.best, lean: b.lean });
     });
-    const data = { date, players: out, league: { games: lg.games, ready: lg.ready } };
+    teams.sort((x, y) => String(x.start).localeCompare(String(y.start)));
+    const data = { date, players: out, teams, league: { games: lg.games, ready: lg.ready } };
     if (lg.ready) PROPC.set(date, { data, exp: Date.now() + 600e3 });
     return data;
   }
