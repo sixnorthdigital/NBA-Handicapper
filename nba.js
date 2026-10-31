@@ -193,5 +193,5 @@ module.exports = ({ getJSON, r2 }) => {
   // player props for a day's slate (model.js), with the standings table the game model needs
   async function props(date) { const yr = seasonYr(new Date(date + "T12:00:00Z")), [gs, tb] = await Promise.all([games(date), table(yr)]); return model.props(gs, date, tb); }
 
-  return { games, matchup, props, warm, dumpBoxes: model.dumpBoxes, loadBoxes: model.loadBoxes };
+  return { games, matchup, props, warm, box: model.box, dumpBoxes: model.dumpBoxes, loadBoxes: model.loadBoxes };
 };

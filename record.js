@@ -52,6 +52,8 @@ async function summary() {
   return { updated: rec.updated || null, totals: { best: out(T.best), winner: out(T.winner), spread: out(T.spread), total: out(T.total) },
     bestByType: { ml: out(bestByType.ml), spread: out(bestByType.spread), total: out(bestByType.total) }, underdogs: out(dog), strength,
     accuracy: { margin: err.nM ? { n: err.nM, model: r1(err.mM / err.nM), market: r1(err.kM / err.nM) } : null, total: err.nT ? { n: err.nT, model: r1(err.mT / err.nT), market: r1(err.kT / err.nT) } : null },
-    missed, pending, days: list.slice(0, 30) };
+    missed, pending, days: list.slice(0, 30),
+    // daily cheat sheets as they stood at tip-off, marked W / L / V (didn't play) once final
+    sheets: Object.keys(rec.sheets || {}).sort().reverse().slice(0, 30).map(d => ({ date: d, ...rec.sheets[d] })) };
 }
 module.exports = { summary };

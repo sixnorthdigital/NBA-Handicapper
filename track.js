@@ -69,6 +69,69 @@ function settle(G) {   // grade every pick of a final game
   G.grades = { best: one(s.best), winner: one(s.winner), spread: one(s.spread), total: one(s.total) };
 }
 
+// ---------- daily cheat sheets (same rules as the app's NBA Streaks tab) ----------
+// Each run rebuilds the rows for games that haven't started, so a row is kept as it stood at tip-off; once the game is final
+// it's marked: W = cleared the line, L = missed, V = didn't play. Team streaks: W = the streak kept going.
+const LINES = { pts: [10, 15, 20, 25, 30, 35, 40], reb: [4, 6, 8, 10, 12, 14], ast: [3, 4, 6, 8, 10, 12], tpm: [2, 3, 4, 5, 6], pra: [20, 25, 30, 35, 40, 45, 50], stl: [2, 3], blk: [2, 3, 4] };
+const LAB = { pts: "PTS", reb: "REB", ast: "AST", tpm: "3PM", pra: "PRA", stl: "STL", blk: "BLK" }, IX = { pts: 4, reb: 5, ast: 6, tpm: 7, stl: 8, blk: 9 };
+const val = (x, k) => k === "pra" ? x[4] + x[5] + x[6] : x[IX[k]];
+const Phi = z => { const t = 1 / (1 + .2316419 * Math.abs(z)), d = .3989423 * Math.exp(-z * z / 2), p = d * t * (.3193815 + t * (-.3565638 + t * (1.781478 + t * (-1.821256 + t * 1.330274)))); return z > 0 ? 1 - p : p; };
+function chance(p, k, n) {   // P(at least n) tonight, as on the phone
+  const mu = (p.lam || {})[k] || 0, sd = (p.sd || {})[k] || 1;
+  if (["tpm", "stl", "blk"].includes(k) || mu < 4) { let q = Math.exp(-mu), c = q; for (let i = 1; i < n; i++) { q *= mu / i; c += q; } return Math.max(0, Math.min(1, 1 - c)); }
+  return 1 - Phi((n - .5 - mu) / Math.max(sd, .5));
+}
+function best(p, L, min) {
+  let b = null;
+  for (const k of Object.keys(LINES)) for (const t of LINES[k]) {
+    let n = 0; while (n < L.length && val(L[n], k) >= t) n++;
+    if (n < min) continue;
+    const ch = chance(p, k, t);
+    if (!b || n > b.n || (n === b.n && ch < b.ch)) b = { prop: k, lab: LAB[k], t, n, ch: r3(ch), ls: L.slice(0, n).some(x => x[0] === 1) };
+  }
+  return b;
+}
+async function sheets(rec, date, now) {
+  const D = (rec.sheets = rec.sheets || {})[date] = (rec.sheets || {})[date] || { vso: [], streaks: [], teams: [] };
+  let P = null;
+  try { P = await nba.props(date); } catch (e) { console.error("sheets props:", e.message); }
+  if (P && P.players.length) {
+    const fut = new Set((P.teams || []).filter(t => t.state === "FUT" && Date.parse(t.start) > now).map(t => String(t.id)));
+    const keep = list => list.filter(e => !fut.has(String(e.gid)));   // rows for games already under way stay as they were
+    const row = (p, b) => ({ id: p.id, name: p.name, team: p.team, opp: p.opp, home: p.home, gid: String(p.gid), start: p.start, ...b });
+    const vso = [], st = [];
+    for (const p of P.players) {
+      if (!fut.has(String(p.gid))) continue;
+      const a = best(p, p.vs || [], 5); if (a) vso.push(row(p, { ...a, ls: false }));
+      const b = best(p, p.games || [], 5); if (b) st.push(row(p, b));
+    }
+    const rank = l => l.sort((x, y) => y.n - x.n || x.ch - y.ch).map((e, i) => ({ ...e, rank: i + 1 }));
+    D.vso = rank(keep(D.vso).concat(vso)); D.streaks = rank(keep(D.streaks).concat(st));
+    const tm = [];
+    for (const t of P.teams || []) if (fut.has(String(t.id))) for (const s of ["home", "away"]) { const x = t.streak && t.streak[s]; if (x && x.n >= 3) tm.push({ a: t[s].abbr, opp: t[s === "home" ? "away" : "home"].abbr, home: s === "home", code: x.code, n: x.n, gid: String(t.id), start: t.start }); }
+    D.teams = keep(D.teams).concat(tm);
+  }
+  // mark finished games
+  const gs = await nba.games(date).catch(() => []), fin = {};
+  gs.forEach(g => { if (g.state === "FINAL") fin[String(g.id)] = g; else if (g.state === "PPD") fin[String(g.id)] = { ppd: true }; });
+  for (const e of [...D.vso, ...D.streaks]) {
+    if (e.r || !fin[e.gid]) continue;
+    if (fin[e.gid].ppd) { e.r = "V"; continue; }
+    const b = await nba.box(e.gid).catch(() => null); if (!b) continue;
+    const x = (b.p[e.team] || []).find(z => z[0] === e.id);
+    if (!x) { e.r = "V"; continue; }
+    const v = e.prop === "pra" ? x[5] + x[6] + x[7] : x[{ pts: 5, reb: 6, ast: 7, tpm: 8, stl: 9, blk: 10 }[e.prop]];
+    e.v = v; e.r = v >= e.t ? "W" : "L";
+  }
+  for (const e of D.teams) {
+    const g = fin[e.gid]; if (e.r || !g) continue;
+    if (g.ppd) { e.r = "V"; continue; }
+    const me = e.home ? g.home : g.away, op = e.home ? g.away : g.home, won = me.score > op.score;
+    e.out = won ? "W" : "L"; e.sc = [me.score, op.score]; e.r = (e.code === "W") === won ? "W" : "L";
+  }
+  if (!D.vso.length && !D.streaks.length && !D.teams.length) delete rec.sheets[date];
+}
+
 (async () => {
   let rec = { v: 1, days: {} };
   try { rec = JSON.parse(fs.readFileSync(FILE, "utf8")); } catch (e) {}
@@ -93,6 +156,7 @@ function settle(G) {   // grade every pick of a final game
       else if (!G.snap && Date.parse(g.start) <= now) G.missed = true;   // tipped off before the first snapshot
     }
   }
+  for (const date of dates) { if (date === today || (rec.sheets || {})[date]) { try { await sheets(rec, date, now); } catch (e) { console.error(date, "sheets:", e.message); } } }
   rec.updated = new Date().toISOString();
   fs.mkdirSync(DIR, { recursive: true }); fs.writeFileSync(FILE, JSON.stringify(rec));
   fs.mkdirSync(CDIR, { recursive: true }); fs.writeFileSync(BOXF, JSON.stringify(nba.dumpBoxes()));
